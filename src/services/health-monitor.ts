@@ -6,7 +6,6 @@
 import { ConfigService } from '../config/config';
 import { MemoryManager } from './memory-manager.js';
 import { ErrorRecoveryService } from '../lib/error-handler.js';
-import { LRUCacheService } from '../lib/lru-cache-service.js';
 
 export interface HealthMetrics {
   timestamp: Date;
@@ -50,7 +49,6 @@ export class HealthMonitor {
   private static instance: HealthMonitor;
   private readonly config: ConfigService;
   private readonly memoryManager: MemoryManager;
-  private readonly lruCache: LRUCacheService;
   
   private metrics: Map<string, MetricPoint[]> = new Map();
   private alerts: AlertThreshold[] = [];
@@ -68,7 +66,6 @@ export class HealthMonitor {
   private constructor() {
     this.config = ConfigService.getInstance();
     this.memoryManager = MemoryManager.getInstance();
-    this.lruCache = LRUCacheService.getInstance();
     
     this.startTime = new Date();
     this.setupDefaultAlerts();
@@ -291,10 +288,9 @@ export class HealthMonitor {
     this.recordMetric('active_connections', this.activeConnections);
     
     // Memory manager metrics
-    const cacheStats = this.lruCache.getStats();
-    const hitRate = this.lruCache.getCacheHitRate();
-    this.recordMetric('lru_cache_size', cacheStats.fileCache.size);
-    this.recordMetric('lru_cache_hit_rate', hitRate.fileCache);
+    const memoryManagerStats = this.memoryManager.getStats();
+    this.recordMetric('memory_manager_files', memoryManagerStats.fileCount);
+    this.recordMetric('memory_manager_usage_mb', memoryManagerStats.usedMemoryMB);
   }
 
   /**

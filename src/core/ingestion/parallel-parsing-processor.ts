@@ -52,16 +52,18 @@ export interface ParallelParsingResult {
 
 
 
-export class ParallelParsingProcessor implements GraphProcessor<ParsingInput> {
+	export class ParallelParsingProcessor implements GraphProcessor<ParsingInput> {
 	private memoryManager: MemoryManager;
 	private duplicateDetector = new DuplicateDetector<string>((item: string) => item);
 	private processedFiles = new OptimizedSet<string>();
-  private astMap: Map<string, ParsedAST> = new Map();
+  private astMap: Map<string, ParsedAST> = new Map(); // Keep for compatibility with import/call processors
   private functionTrie: FunctionRegistryTrie = new FunctionRegistryTrie();
   private workerPool: WebWorkerPool;
   private isInitialized: boolean = false;
   private parser: Parser | null = null;
   private languageParsers: Map<string, Parser.Language> = new Map();
+  private memoryMonitorInterval: NodeJS.Timeout | null = null;
+  private readonly MAX_AST_MAP_SIZE = 1000; // Limit AST map size to prevent memory issues
 
 	constructor() {
 		this.memoryManager = MemoryManager.getInstance();
@@ -108,6 +110,9 @@ export class ParallelParsingProcessor implements GraphProcessor<ParsingInput> {
 			this.workerPool.on('shutdown', () => {
 				console.log('ParallelParsingProcessor: Worker pool shutdown');
 			});
+
+			// Start memory monitoring
+			this.startMemoryMonitoring();
 
 			this.isInitialized = true;
 			console.log('ParallelParsingProcessor: Worker pool initialized successfully');
@@ -169,53 +174,61 @@ export class ParallelParsingProcessor implements GraphProcessor<ParsingInput> {
 
 		console.log(`ParallelParsingProcessor: Starting parallel processing of ${tasks.length} files`);
 
-		try {
-			// Process with progress tracking
-			const results = await this.workerPool.executeWithProgress<any, ParallelParsingResult>(
-				tasks,
-				(completed, total) => {
-					const progress = ((completed / total) * 100).toFixed(1);
-					console.log(`ParallelParsingProcessor: Progress: ${progress}% (${completed}/${total})`);
+		let workerResults: ParallelParsingResult[] = [];
+		
+		if (tasks.length > 0) {
+			try {
+				// Process with progress tracking
+				const results = await this.workerPool.executeWithProgress<any, ParallelParsingResult>(
+					tasks,
+					(completed, total) => {
+						const progress = ((completed / total) * 100).toFixed(1);
+						console.log(`ParallelParsingProcessor: Progress: ${progress}% (${completed}/${total})`);
+					}
+				);
+
+				const endTime = performance.now();
+				const duration = endTime - startTime;
+				
+				console.log(`ParallelParsingProcessor: Parallel processing completed in ${duration.toFixed(2)}ms`);
+				if (tasks.length > 0) {
+					console.log(`ParallelParsingProcessor: Average time per file: ${(duration / tasks.length).toFixed(2)}ms`);
 				}
-			);
 
-			const endTime = performance.now();
-			const duration = endTime - startTime;
-			
-			console.log(`ParallelParsingProcessor: Parallel processing completed in ${duration.toFixed(2)}ms`);
-			console.log(`ParallelParsingProcessor: Average time per file: ${(duration / tasks.length).toFixed(2)}ms`);
+				// Log worker pool statistics
+				const stats = this.workerPool.getStats();
+				console.log('ParallelParsingProcessor: Worker pool stats:', stats);
 
-			// Log worker pool statistics
-			const stats = this.workerPool.getStats();
-			console.log('ParallelParsingProcessor: Worker pool stats:', stats);
-
-			// Transform worker results to match expected format
-			const transformedResults: ParallelParsingResult[] = results.map((result: any, index: number) => {
-				if (result && result.filePath) {
-					return {
-						filePath: result.filePath,
-						definitions: result.definitions || [],
-						ast: result.ast || null,
-						success: !result.error,
-						error: result.error
-					};
-				} else {
-					// Handle undefined/null results
-					return {
-						filePath: tasks[index]?.filePath || 'unknown',
-						definitions: [],
-						ast: null,
-						success: false,
-						error: 'Worker returned undefined result'
-					};
-				}
-			});
-
-			return transformedResults;
-		} catch (error) {
-			console.error('ParallelParsingProcessor: Error in parallel processing:', error);
-			throw error;
+				// Transform worker results to match expected format
+				workerResults = results.map((result: any, index: number) => {
+					if (result && result.filePath) {
+						return {
+							filePath: result.filePath,
+							definitions: result.definitions || [],
+							ast: result.ast || null,
+							success: !result.error,
+							error: result.error
+						};
+					} else {
+						// Handle undefined/null results
+						return {
+							filePath: tasks[index]?.filePath || 'unknown',
+							definitions: [],
+							ast: null,
+							success: false,
+							error: 'Worker returned undefined result'
+						};
+					}
+				});
+			} catch (error) {
+				console.error('ParallelParsingProcessor: Error in worker pool processing:', error);
+				throw error;
+			}
 		}
+
+		console.log(`ParallelParsingProcessor: Total results: ${workerResults.length} processed`);
+		
+		return workerResults;
 	}
 
 	/**
@@ -253,6 +266,11 @@ export class ParallelParsingProcessor implements GraphProcessor<ParsingInput> {
 
 		console.log(`ParallelParsingProcessor: Processing complete - ${successfulFiles} successful, ${failedFiles} failed`);
 		console.log(`ParallelParsingProcessor: Total definitions extracted: ${totalDefinitions}`);
+		
+		// Log final memory and AST map statistics
+		const finalMemoryStats = this.memoryManager.getStats();
+		console.log(`ParallelParsingProcessor: Final Memory Status - ${finalMemoryStats.usedMemoryMB}MB used, ${finalMemoryStats.fileCount} files cached`);
+		console.log(`ParallelParsingProcessor: AST Map Size: ${this.astMap.size} entries`);
 	}
 
 	/**
@@ -283,7 +301,7 @@ export class ParallelParsingProcessor implements GraphProcessor<ParsingInput> {
 		// Generate unique ID based on file path and definition name (same as single-threaded)
 		const nodeId = generateId(`${definition.type}_${filePath}_${definition.name}_${definition.startLine}`);
 		
-		if (this.duplicateDetector.isDuplicate(nodeId)) {
+		if (this.duplicateDetector.checkAndMark(nodeId)) {
 			return;
 		}
 
@@ -303,9 +321,9 @@ export class ParallelParsingProcessor implements GraphProcessor<ParsingInput> {
 				isStatic: definition.isStatic,
 				isAsync: definition.isAsync,
 				parentClass: definition.parentClass,
-				decorators: definition.decorators?.join(', '),
-				extends: definition.extends?.join(', '),
-				implements: definition.implements?.join(', '),
+				decorators: definition.decorators,
+				extends: definition.extends,
+				implements: definition.implements,
 				importPath: definition.importPath,
 				exportType: definition.exportType,
 				docstring: definition.docstring
@@ -568,11 +586,46 @@ export class ParallelParsingProcessor implements GraphProcessor<ParsingInput> {
 	}
 
 	/**
-	 * Shutdown the worker pool
+	 * Shutdown the worker pool and cleanup resources
 	 */
 	public async shutdown(): Promise<void> {
-		if (this.workerPool) {
-			await this.workerPool.shutdown();
+		try {
+			console.log('ParallelParsingProcessor: Starting shutdown...');
+			
+			// Stop memory monitoring
+			if (this.memoryMonitorInterval) {
+				clearInterval(this.memoryMonitorInterval);
+				this.memoryMonitorInterval = null;
+			}
+			
+			// Shutdown worker pool
+			if (this.workerPool) {
+				await this.workerPool.shutdown();
+			}
+			
+			// Clear large data structures to free memory
+			this.astMap.clear();
+			this.processedFiles.clear();
+			this.functionTrie = new FunctionRegistryTrie(); // Reset trie
+			
+			
+			// Clear language parsers
+			this.languageParsers.clear();
+			
+			// Reset parser
+			if (this.parser) {
+				try {
+					this.parser.delete();
+				} catch (error) {
+					console.warn('Error deleting parser:', error);
+				}
+				this.parser = null;
+			}
+			
+			this.isInitialized = false;
+			console.log('ParallelParsingProcessor: Shutdown complete');
+		} catch (error) {
+			console.error('ParallelParsingProcessor: Error during shutdown:', error);
 		}
 	}
 
@@ -582,6 +635,72 @@ export class ParallelParsingProcessor implements GraphProcessor<ParsingInput> {
 	public getWorkerPoolStats() {
 		return this.workerPool ? this.workerPool.getStats() : null;
 	}
+
+	/**
+	 * Start memory monitoring to prevent memory leaks
+	 */
+	private startMemoryMonitoring(): void {
+		// Monitor memory every 30 seconds
+		this.memoryMonitorInterval = setInterval(() => {
+			this.monitorMemoryUsage();
+		}, 30000);
+	}
+
+	/**
+	 * Monitor memory usage and trigger cleanup if needed
+	 */
+	private monitorMemoryUsage(): void {
+		try {
+			const memoryStats = this.memoryManager.getStats();
+			const astMapSize = this.astMap.size;
+			const processedFilesSize = this.processedFiles.size;
+			
+			console.log(`ParallelParsingProcessor Memory Stats:
+				- Memory Manager: ${memoryStats.usedMemoryMB}MB used, ${memoryStats.fileCount} files cached
+				- AST Map: ${astMapSize} entries
+				- Processed Files: ${processedFilesSize} entries`);
+			
+			// If AST map is getting too large, clean up old entries
+			if (astMapSize > this.MAX_AST_MAP_SIZE) {
+				console.warn(`AST map size (${astMapSize}) exceeds limit (${this.MAX_AST_MAP_SIZE}), cleaning up...`);
+				this.cleanupASTMap();
+			}
+			
+			// If memory usage is high, trigger memory manager cleanup
+			if (memoryStats.usedMemoryMB > 500) { // 500MB threshold
+				console.warn(`High memory usage detected (${memoryStats.usedMemoryMB}MB), triggering cleanup...`);
+				this.memoryManager.clearCache();
+				
+			}
+			
+			// Monitor worker pool memory usage
+			WebWorkerPoolUtils.monitorMemoryUsage();
+			
+		} catch (error) {
+			console.warn('Error monitoring memory usage:', error);
+		}
+	}
+
+	/**
+	 * Clean up old AST map entries to prevent memory bloat
+	 */
+	private cleanupASTMap(): void {
+		try {
+			const entries = Array.from(this.astMap.entries());
+			const toRemove = entries.length - Math.floor(this.MAX_AST_MAP_SIZE * 0.8); // Keep 80% of max
+			
+			if (toRemove > 0) {
+				// Remove oldest entries (assuming they're less likely to be needed)
+				const keysToRemove = entries.slice(0, toRemove).map(([key]) => key);
+				keysToRemove.forEach(key => this.astMap.delete(key));
+				
+				console.log(`Cleaned up ${toRemove} AST map entries`);
+			}
+		} catch (error) {
+			console.warn('Error cleaning up AST map:', error);
+		}
+	}
+
 
 	/**
 	 * Get diagnostic information about parsing results
@@ -711,7 +830,14 @@ export class ParallelParsingProcessor implements GraphProcessor<ParsingInput> {
 		try {
 			this.parser.setLanguage(langParser);
 			const tree = this.parser.parse(content);
+			
+			// Store in AST map for import/call processors
 			this.astMap.set(filePath, { tree });
+			
+			// Clean up AST map if it gets too large
+			if (this.astMap.size > this.MAX_AST_MAP_SIZE) {
+				this.cleanupASTMap();
+			}
 		} catch (error) {
 			console.error(`Failed to recreate AST for ${filePath}:`, error);
 		}

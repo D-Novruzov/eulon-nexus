@@ -1,15 +1,14 @@
 import { useState, useCallback, useEffect } from 'react';
 import { featureFlagManager } from '../../config/feature-flags';
-import type { ProcessingEngineType } from '../../core/engines/engine-interface';
 import type { LLMProvider } from '../../ai/llm-service';
+
+type ParsingMode = 'single' | 'parallel';
 
 interface SettingsState {
   // Processing settings
   directoryFilter: string;
   fileExtensions: string;
-  processingEngine: ProcessingEngineType;
-  autoFallback: boolean;
-  performanceComparison: boolean;
+  parsingMode: ParsingMode;
   
   // LLM settings
   llmProvider: LLMProvider;
@@ -39,9 +38,7 @@ const DEFAULT_SETTINGS: SettingsState = {
   // Processing settings
   directoryFilter: 'src,lib,components,pages,utils',
   fileExtensions: '.ts,.tsx,.js,.jsx,.py,.java,.cpp,.c,.cs,.php,.rb,.go,.rs,.swift,.kt,.scala,.clj,.hs,.ml,.fs,.elm,.dart,.lua,.r,.m,.sh,.sql,.html,.css,.scss,.less,.vue,.svelte',
-  processingEngine: 'legacy',
-  autoFallback: true,
-  performanceComparison: false,
+  parsingMode: 'single',
   
   // LLM settings
   llmProvider: 'openai',
@@ -74,9 +71,7 @@ export const useSettings = (): UseSettingsReturn => {
         azureOpenAIDeploymentName: localStorage.getItem('azure_openai_deployment') || '',
         azureOpenAIApiVersion: localStorage.getItem('azure_openai_api_version') || '2024-02-01',
         githubToken: localStorage.getItem('github_token') || '',
-        processingEngine: featureFlagManager.getProcessingEngine(),
-        autoFallback: featureFlagManager.getFlag('autoFallbackOnError'),
-        performanceComparison: featureFlagManager.getFlag('enablePerformanceComparison')
+        parsingMode: (featureFlagManager.isParallelParsingEnabled() ? 'parallel' : 'single') as ParsingMode
       };
       
       Object.assign(loadedSettings, stored);
@@ -92,9 +87,7 @@ export const useSettings = (): UseSettingsReturn => {
     const handleFlagChanges = (flags: any) => {
       setSettings(prev => ({
         ...prev,
-        processingEngine: flags.processingEngine,
-        autoFallback: flags.autoFallbackOnError,
-        performanceComparison: flags.enablePerformanceComparison
+        parsingMode: (flags.enableParallelParsing ? 'parallel' : 'single') as ParsingMode
       }));
     };
     
@@ -133,18 +126,9 @@ export const useSettings = (): UseSettingsReturn => {
           case 'githubToken':
             if (value) localStorage.setItem('github_token', value as string);
             break;
-          case 'processingEngine':
-            if (value === 'legacy') {
-              featureFlagManager.switchToLegacyEngine();
-            } else {
-              featureFlagManager.switchToNextGenEngine();
-            }
-            break;
-          case 'autoFallback':
-            featureFlagManager.setFlag('autoFallbackOnError', value as boolean);
-            break;
-          case 'performanceComparison':
-            featureFlagManager.setFlag('enablePerformanceComparison', value as boolean);
+          case 'parsingMode':
+            featureFlagManager.setFlag('enableParallelParsing', value === 'parallel');
+            localStorage.setItem('parsing_mode', value as string);
             break;
         }
       } catch (error) {

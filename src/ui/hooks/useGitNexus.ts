@@ -1,6 +1,4 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { GitNexusFacade } from '../../services/facade/gitnexus-facade';
-import { useEngine } from './useEngine';
 import { useProcessing } from './useProcessing';
 import { useSettings } from './useSettings';
 import type { KnowledgeGraph } from '../../core/graph/types';
@@ -21,9 +19,6 @@ interface GitNexusState {
 interface UseGitNexusReturn {
   // State
   state: GitNexusState;
-  
-  // Engine management
-  engine: ReturnType<typeof useEngine>;
   
   // Processing operations
   processing: ReturnType<typeof useProcessing>;
@@ -47,15 +42,8 @@ interface UseGitNexusReturn {
  * Main GitNexus hook that combines all functionality
  */
 export const useGitNexus = (): UseGitNexusReturn => {
-  // Initialize facade
-  const [facade] = useState(() => {
-    const githubToken = localStorage.getItem('github_token') || undefined;
-    return new GitNexusFacade(githubToken);
-  });
-  
   // Initialize hooks
-  const engine = useEngine(facade);
-  const processing = useProcessing(facade);
+  const processing = useProcessing();
   const settings = useSettings();
   
   // Local UI state
@@ -150,7 +138,6 @@ export const useGitNexus = (): UseGitNexusReturn => {
   
   return {
     state,
-    engine,
     processing,
     settings,
     handleNodeSelect,
@@ -158,7 +145,6 @@ export const useGitNexus = (): UseGitNexusReturn => {
     handleZipProcess,
     toggleStats,
     toggleExportModal,
-    setShowWelcome,
-    facade
+    setShowWelcome
   };
 };

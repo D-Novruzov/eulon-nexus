@@ -6,11 +6,11 @@ import type { KnowledgeGraph } from '../../../core/graph/types.ts';
 import { LLMService, type LLMProvider, type LLMConfig } from '../../../ai/llm-service.ts';
 import { CypherGenerator } from '../../../ai/cypher-generator.ts';
 import { ReActAgent, type ReActResult, type ReActOptions } from '../../../ai/react-agent.ts';
-import { KuzuQueryEngine } from '../../../core/graph/kuzu-query-engine.ts';
+// KuzuDB query engine removed - using SimpleKnowledgeGraph directly
 import { sessionManager, type SessionInfo } from '../../../lib/session-manager.ts';
 import { ChatSessionManager, LocalStorageChatHistory, type ChatHistoryMetadata } from '../../../lib/chat-history.ts';
 import { AIMessage } from '@langchain/core/messages';
-import { QueryCacheService } from '../../../lib/query-cache.ts';
+// Query cache functionality removed - using direct graph queries
 
 interface ChatMessage {
   id: string;
@@ -90,7 +90,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [showSessionManager, setShowSessionManager] = useState(false);
   const [chatHistory, setChatHistory] = useState<LocalStorageChatHistory | null>(null);
-  const [queryCache] = useState(() => QueryCacheService.getInstance());
+  // Query cache removed - using direct graph queries
   
   // LLM Configuration
   const [llmSettings, setLLMSettings] = useState<LLMSettings>({
@@ -107,8 +107,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   // Services
   const [llmService] = useState(new LLMService());
   const [cypherGenerator] = useState(new CypherGenerator(llmService));
-  const [kuzuQueryEngine] = useState(new KuzuQueryEngine());
-  const [ragOrchestrator] = useState(new ReActAgent(llmService, cypherGenerator, kuzuQueryEngine));
+  // KuzuDB query engine removed - using graph directly
+  const [ragOrchestrator] = useState(new ReActAgent(llmService, cypherGenerator, graph));
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -118,9 +118,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     const initializeOrchestrator = async () => {
       try {
         await ragOrchestrator.initialize();
-        
-        // Load existing queries from chat history into cache
-        await queryCache.loadFromChatHistory();
         
         // Only set context if we have valid graph data
         if (graph && graph.nodes && graph.nodes.length > 0) {
@@ -265,12 +262,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       timestamp: new Date()
     };
 
-    // Check for cached query suggestions
-    const cachedSuggestions = queryCache.findSimilarQueries(userMessage.content, {
-      minSimilarity: 0.8,
-      maxResults: 3,
-      minConfidence: 0.7
-    });
+    // Query cache removed - using direct processing
 
     // Save user message to chat history
     await chatHistory.addUserMessage(userMessage.content);
@@ -363,31 +355,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         metadata
       );
 
-      // Learn from this query for future improvements
-      if (response.cypherQueries.length > 0) {
-        const success = response.confidence > 0.5;
-        queryCache.addQuery(
-          userMessage.content,
-          response.cypherQueries[0].cypher,
-          response.confidence,
-          executionTime,
-          0, // We don't have result count
-          success
-        );
-      }
+      // Query learning removed - using direct processing
 
-      // Add cache suggestions to the message if available
-      if (cachedSuggestions.length > 0) {
-        assistantMessage.metadata = {
-          ...assistantMessage.metadata,
-          cacheSuggestions: cachedSuggestions.map(s => ({
-            cypherQuery: s.cypherQuery,
-            confidence: s.confidence,
-            similarity: s.similarity,
-            sourceQuestion: s.sourceQuestion
-          }))
-        };
-      }
+      // Cache suggestions removed - using direct processing
 
       setMessages(prev => [...prev, assistantMessage]);
 

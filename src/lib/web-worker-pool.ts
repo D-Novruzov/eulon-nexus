@@ -3,6 +3,20 @@
  * Manages a pool of Web Workers to process tasks concurrently
  */
 
+interface PerformanceMemory {
+  usedJSHeapSize: number;
+  totalJSHeapSize: number;
+  jsHeapSizeLimit: number;
+}
+
+interface PerformanceWithMemory extends Performance {
+  memory?: PerformanceMemory;
+}
+
+interface WindowWithGC extends Window {
+  gc?: () => void;
+}
+
 export interface WorkerTask<TInput = unknown, TOutput = unknown> {
   id: string;
   input: TInput;
@@ -122,13 +136,16 @@ export class WebWorkerPool {
    * Get pool statistics
    */
   getStats(): WorkerPoolStats {
+    // Estimate memory usage based on active tasks and queued tasks
+    const estimatedMemoryUsage = (this.activeTasks.size + this.taskQueue.length) * 1024; // 1KB per task estimate
+    
     return {
       totalWorkers: this.workers.length,
       availableWorkers: this.availableWorkers.length,
       activeTasks: this.activeTasks.size,
       queuedTasks: this.taskQueue.length,
       maxWorkers: this.maxWorkers,
-      memoryUsage: undefined
+      memoryUsage: estimatedMemoryUsage
     };
   }
 
@@ -164,9 +181,15 @@ export class WebWorkerPool {
       })
     );
 
-    // Terminate all workers
-    const terminatePromises = this.workers.map(worker => {
+    // Terminate all workers and clean up event listeners
+    const terminatePromises = this.workers.map(async (worker) => {
       try {
+        // Remove all event listeners before terminating
+        worker.onmessage = null;
+        worker.onerror = null;
+        worker.onmessageerror = null;
+        
+        // Force terminate the worker
         worker.terminate();
         return Promise.resolve();
       } catch (error) {
@@ -186,9 +209,13 @@ export class WebWorkerPool {
 
     await Promise.all(terminatePromises);
     
+    // Clear all arrays and maps
     this.workers.length = 0;
     this.availableWorkers.length = 0;
     this.activeTasks.clear();
+    
+    // Clear all event listeners to prevent memory leaks
+    this.eventListeners.clear();
     
     this.emit('shutdown');
     console.log(`${this.name}: Worker pool shutdown complete`);
@@ -355,6 +382,16 @@ export class WebWorkerPool {
       error: errorMessage 
     });
     
+    // Clean up worker event listeners before removal
+    try {
+      worker.onmessage = null;
+      worker.onerror = null;
+      worker.onmessageerror = null;
+      worker.terminate();
+    } catch (terminateError) {
+      console.warn(`${this.name}: Error during worker cleanup:`, terminateError);
+    }
+    
     // Remove worker from pools
     const workerIndex = this.workers.indexOf(worker);
     if (workerIndex !== -1) {
@@ -393,6 +430,23 @@ export class FileProcessingPool extends WebWorkerPool {
       });
     }
     return FileProcessingPool.instance;
+  }
+
+  /**
+   * Shutdown and clear the singleton instance to prevent memory leaks
+   */
+  static async shutdownInstance(): Promise<void> {
+    if (FileProcessingPool.instance) {
+      await FileProcessingPool.instance.shutdown();
+      FileProcessingPool.instance = undefined as any;
+    }
+  }
+
+  /**
+   * Check if singleton instance exists
+   */
+  static hasInstance(): boolean {
+    return FileProcessingPool.instance !== null && FileProcessingPool.instance !== undefined;
   }
 
   /**
@@ -482,5 +536,56 @@ export const WebWorkerPoolUtils = {
    */
   getHardwareConcurrency(): number {
     return navigator.hardwareConcurrency || 4;
+  },
+
+  /**
+   * Cleanup all singleton worker pool instances
+   */
+  async cleanupAllPools(): Promise<void> {
+    await FileProcessingPool.shutdownInstance();
+  },
+
+  /**
+   * Monitor memory usage and trigger cleanup if needed
+   */
+  monitorMemoryUsage(): void {
+    if (typeof performance !== 'undefined' && (performance as PerformanceWithMemory).memory) {
+      const memInfo = (performance as PerformanceWithMemory).memory!
+      const usedMemoryMB = memInfo.usedJSHeapSize / (1024 * 1024);
+      const totalMemoryMB = memInfo.totalJSHeapSize / (1024 * 1024);
+      
+      console.log(`Memory usage: ${usedMemoryMB.toFixed(2)}MB / ${totalMemoryMB.toFixed(2)}MB`);
+      
+      // If memory usage is over 80%, trigger cleanup
+      if (usedMemoryMB / totalMemoryMB > 0.8) {
+        console.warn('High memory usage detected, triggering cleanup...');
+        this.cleanupAllPools();
+        
+        // Suggest garbage collection if available
+        if (typeof window !== 'undefined' && (window as WindowWithGC).gc) {
+          (window as WindowWithGC).gc!();
+        }
+      }
+    }
+  },
+
+  /**
+   * Setup global cleanup handlers for when the app/page unloads
+   */
+  setupGlobalCleanup(): void {
+    if (typeof window !== 'undefined') {
+      // Cleanup on page unload
+      window.addEventListener('beforeunload', async () => {
+        await this.cleanupAllPools();
+      });
+      
+      // Cleanup on page visibility change (when user switches tabs)
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+          // Page is now hidden, good time to cleanup
+          this.cleanupAllPools();
+        }
+      });
+    }
   }
 };

@@ -12,7 +12,6 @@ import Parser from 'web-tree-sitter';
 import { TYPESCRIPT_QUERIES, JAVASCRIPT_QUERIES, PYTHON_QUERIES, JAVA_QUERIES } from './tree-sitter-queries';
 import { initTreeSitter, loadTypeScriptParser, loadPythonParser, loadJavaScriptParser } from '../tree-sitter/parser-loader.js';
 import { FunctionRegistryTrie, FunctionDefinition } from '../graph/trie.js';
-import { LRUCacheService } from '../../lib/lru-cache-service.js';
 import { generateId } from '../../lib/utils';
 
 export interface ParsingInput {
@@ -55,11 +54,9 @@ export class ParsingProcessor implements GraphProcessor<ParsingInput> {
   private languageParsers: Map<string, Parser.Language> = new Map();
   private astMap: Map<string, ParsedAST> = new Map();
   private functionTrie: FunctionRegistryTrie = new FunctionRegistryTrie();
-  private lruCache: LRUCacheService;
 
 	constructor() {
 		this.memoryManager = MemoryManager.getInstance();
-		this.lruCache = LRUCacheService.getInstance();
 	}
 
   public getASTMap(): Map<string, ParsedAST> {
@@ -70,13 +67,6 @@ export class ParsingProcessor implements GraphProcessor<ParsingInput> {
     return this.functionTrie;
   }
 
-  public getCacheStats() {
-    return this.lruCache.getStats();
-  }
-
-  public getCacheHitRate() {
-    return this.lruCache.getCacheHitRate();
-  }
 
 	public async process(graph: KnowledgeGraph, input: ParsingInput): Promise<void> {
 		const { filePaths, fileContents, options } = input;
@@ -117,9 +107,6 @@ export class ParsingProcessor implements GraphProcessor<ParsingInput> {
 			
 			await batchProcessor.processAll(allProcessableFiles);
 			
-			// Log cache statistics
-			const cacheStats = this.getCacheStats();
-			const hitRate = this.getCacheHitRate();
 
 		} catch (error) {
 
@@ -264,13 +251,7 @@ export class ParsingProcessor implements GraphProcessor<ParsingInput> {
 
     for (const [lang, loader] of Object.entries(languageLoaders)) {
       try {
-        // Check cache first
-        let languageParser = this.lruCache.getParser(lang);
-        if (!languageParser) {
-          languageParser = await loader();
-          this.lruCache.setParser(lang, languageParser);
-        } else {
-        }
+        const languageParser = await loader();
         this.languageParsers.set(lang, languageParser);
       } catch (error) {
         console.error(`Failed to load ${lang} parser:`, error);
@@ -288,16 +269,6 @@ export class ParsingProcessor implements GraphProcessor<ParsingInput> {
       return;
     }
     
-    const contentHash = this.generateContentHash(content);
-    const cacheKey = this.lruCache.generateFileCacheKey(filePath, contentHash);
-
-    // Check cache first - TEMPORARILY DISABLED FOR DEBUGGING
-    // const cachedResult = this.lruCache.getParsedFile(cacheKey);
-    // if (cachedResult) {
-    //   this.astMap.set(filePath, { tree: cachedResult.ast });
-    //   await this.addDefinitionsToGraph(graph, filePath, cachedResult.definitions);
-    //   return;
-    // }
 
     const langParser = this.languageParsers.get(language);
 
@@ -319,28 +290,14 @@ export class ParsingProcessor implements GraphProcessor<ParsingInput> {
       }
 
       let totalMatches = 0;
-      // Process queries with caching
+      // Process queries
       for (const [queryName, queryString] of Object.entries(queries)) {
-        const queryCacheKey = this.lruCache.generateQueryCacheKey(language, queryString);
         let queryResults: Parser.QueryMatch[] = [];
 
         try {
-          // Check query cache - TEMPORARILY DISABLED FOR DEBUGGING
-          // const cachedQuery = this.lruCache.getQueryResult(queryCacheKey);
-          // if (cachedQuery) {
-          //   queryResults = cachedQuery.results;
-          // } else {
-            const query = langParser.query(queryString as string);
-            queryResults = query.matches(tree.rootNode);
-            totalMatches += queryResults.length;
-            
-            // Cache query results
-            // this.lruCache.setQueryResult(queryCacheKey, {
-            //   query: queryString,
-            //   results: queryResults,
-            //   timestamp: Date.now()
-            // });
-          // }
+          const query = langParser.query(queryString as string);
+          queryResults = query.matches(tree.rootNode);
+          totalMatches += queryResults.length;
 
           for (const match of queryResults) {
             for (const capture of match.captures) {
@@ -356,14 +313,6 @@ export class ParsingProcessor implements GraphProcessor<ParsingInput> {
         }
       }
 
-      // Cache the parsed file results
-      // this.lruCache.setParsedFile(cacheKey, {
-      //   ast: tree,
-      //   definitions,
-      //   language,
-      //   lastModified: Date.now(),
-      //   fileSize: content.length
-      // });
 
       await this.addDefinitionsToGraph(graph, filePath, definitions);
     } catch (parseError) {
@@ -817,7 +766,6 @@ export class ParsingProcessor implements GraphProcessor<ParsingInput> {
 		this.processedFiles.clear();
 		this.duplicateDetector.clear();
 		this.memoryManager.clearCache();
-		this.lruCache.clearAll();
 	}
 
 	/**

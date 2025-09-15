@@ -1,5 +1,7 @@
 import * as Comlink from 'comlink';
 import { GraphPipeline, type PipelineInput } from '../core/ingestion/pipeline.ts';
+import { ParallelGraphPipeline } from '../core/ingestion/parallel-pipeline.ts';
+import { isParallelParsingEnabled } from '../config/feature-flags.ts';
 import type { KnowledgeGraph } from '../core/graph/types.ts';
 
 export interface IngestionProgress {
@@ -22,11 +24,18 @@ export interface IngestionResult {
 }
 
 export class IngestionWorker {
-  private pipeline: GraphPipeline;
+  private pipeline: GraphPipeline | ParallelGraphPipeline;
   private progressCallback?: (progress: IngestionProgress) => void;
 
   constructor() {
-    this.pipeline = new GraphPipeline();
+    // Choose pipeline based on feature flag - same logic as main thread
+    if (isParallelParsingEnabled()) {
+      console.log('IngestionWorker: Using ParallelGraphPipeline');
+      this.pipeline = new ParallelGraphPipeline();
+    } else {
+      console.log('IngestionWorker: Using GraphPipeline');
+      this.pipeline = new GraphPipeline();
+    }
   }
 
   public setProgressCallback(callback: (progress: IngestionProgress) => void): void {
@@ -44,16 +53,33 @@ export class IngestionWorker {
       
       // Initialize pipeline
       if (!this.pipeline) {
-        this.pipeline = new GraphPipeline();
+        if (isParallelParsingEnabled()) {
+          this.pipeline = new ParallelGraphPipeline();
+        } else {
+          this.pipeline = new GraphPipeline();
+        }
       }
       
-      // Progress tracking
+      // Set up progress callback for the pipeline if it supports it
+      if (this.pipeline instanceof ParallelGraphPipeline && this.progressCallback) {
+        this.pipeline.setProgressCallback((progress) => {
+          // Convert parallel pipeline progress to ingestion worker progress
+          this.progressCallback!({
+            phase: progress.phase as IngestionProgress['phase'],
+            message: progress.message,
+            progress: progress.progress,
+            timestamp: progress.timestamp
+          });
+        });
+      }
+
+      // Progress tracking for regular pipeline
       let currentProgress = 0;
       const totalSteps = 3; // structure, parsing, calls
       
       const updateProgress = (phase: IngestionProgress['phase'], message: string, stepProgress: number) => {
         const overallProgress = (currentProgress / totalSteps) * 100 + (stepProgress / totalSteps);
-        if (this.progressCallback) {
+        if (this.progressCallback && !(this.pipeline instanceof ParallelGraphPipeline)) {
           this.progressCallback({
             phase,
             message,
@@ -64,7 +90,9 @@ export class IngestionWorker {
       };
 
       // Run the pipeline with memory optimization
-      updateProgress('structure', 'Analyzing project structure...', 0);
+      if (!(this.pipeline instanceof ParallelGraphPipeline)) {
+        updateProgress('structure', 'Analyzing project structure...', 0);
+      }
       const graph = await this.pipeline.run({
         ...input,
         fileContents: fileContentsMap

@@ -136,9 +136,11 @@ export class ParallelGraphPipeline {
       
     } catch (error) {
       console.error('❌ Error in parallel pipeline:', error);
+      // Ensure cleanup happens even on error
+      await this.cleanup();
       throw error;
     } finally {
-      // Cleanup worker pools
+      // Final cleanup to ensure no resources leak
       await this.cleanup();
     }
   }
@@ -200,6 +202,9 @@ export class ParallelGraphPipeline {
       
       // Shutdown parsing processor (which includes worker pool)
       await this.parsingProcessor.shutdown();
+      
+      // Cleanup singleton worker pool instances
+      await WebWorkerPoolUtils.cleanupAllPools();
       
       console.log('✅ Parallel pipeline cleanup complete');
     } catch (error) {

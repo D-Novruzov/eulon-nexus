@@ -4,11 +4,6 @@
  */
 
 export interface FeatureFlags {
-  // KuzuDB Integration
-  enableKuzuDB: boolean;
-  enableKuzuDBPersistence: boolean;
-  enableKuzuDBPerformanceMonitoring: boolean;
-  
   // AI Features
   enableAdvancedRAG: boolean;
   enableReActReasoning: boolean;
@@ -29,11 +24,6 @@ export interface FeatureFlags {
 }
 
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
-  // KuzuDB Integration - Now enabled with npm package
-  enableKuzuDB: true,
-  enableKuzuDBPersistence: true,
-  enableKuzuDBPerformanceMonitoring: true,
-  
   // AI Features
   enableAdvancedRAG: true,
   enableReActReasoning: true,

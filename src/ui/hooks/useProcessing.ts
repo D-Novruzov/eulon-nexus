@@ -1,20 +1,17 @@
 import { useState, useCallback } from 'react';
-import { GitNexusFacade, type GitNexusResult, type GitNexusProcessingOptions } from '../../services/facade/gitnexus-facade';
-import type { ProcessingEngineType } from '../../core/engines/engine-interface';
+import { IngestionService, type IngestionResult } from '../../services/ingestion.service';
 
 interface ProcessingState {
   isProcessing: boolean;
   progress: string;
   error: string;
-  result: GitNexusResult | null;
-  hadFallback: boolean;
-  fallbackEngine?: ProcessingEngineType;
+  result: IngestionResult | null;
 }
 
 interface UseProcessingReturn {
   state: ProcessingState;
-  processGitHubRepo: (url: string, options?: GitNexusProcessingOptions) => Promise<void>;
-  processZipFile: (file: File, options?: GitNexusProcessingOptions) => Promise<void>;
+  processGitHubRepo: (url: string, token?: string) => Promise<void>;
+  processZipFile: (file: File) => Promise<void>;
   clearError: () => void;
   clearResult: () => void;
 }
@@ -22,14 +19,15 @@ interface UseProcessingReturn {
 /**
  * Custom hook for managing processing operations
  */
-export const useProcessing = (facade: GitNexusFacade): UseProcessingReturn => {
+export const useProcessing = (): UseProcessingReturn => {
   const [state, setState] = useState<ProcessingState>({
     isProcessing: false,
     progress: '',
     error: '',
-    result: null,
-    hadFallback: false
+    result: null
   });
+  
+  const ingestionService = new IngestionService();
   
   const updateState = useCallback((updates: Partial<ProcessingState>) => {
     setState(prev => ({ ...prev, ...updates }));
@@ -37,138 +35,71 @@ export const useProcessing = (facade: GitNexusFacade): UseProcessingReturn => {
   
   const processGitHubRepo = useCallback(async (
     url: string, 
-    options: GitNexusProcessingOptions = {}
+    token?: string
   ) => {
     try {
       updateState({
         isProcessing: true,
         progress: 'Starting GitHub repository processing...',
         error: '',
-        result: null,
-        hadFallback: false
+        result: null
       });
       
       console.log('🚀 useProcessing: Starting GitHub processing for:', url);
       
-      const processingOptions: GitNexusProcessingOptions = {
-        ...options,
-        onProgress: (progress) => {
-          updateState({ progress });
-          options.onProgress?.(progress);
-        },
-        onEngineSwitch: (from, to) => {
-          updateState({ 
-            hadFallback: true, 
-            fallbackEngine: to,
-            progress: `Engine fallback: ${from} → ${to}` 
-          });
-          options.onEngineSwitch?.(from, to);
-        }
-      };
+      const result = await ingestionService.processGitHubRepository(url, token);
       
-      const result = await facade.processGitHubRepository(url, processingOptions);
-      
-      if (result.success) {
-        updateState({
-          isProcessing: false,
-          progress: '',
-          result,
-          hadFallback: result.hadFallback
-        });
-        console.log('✅ useProcessing: GitHub processing completed successfully');
-      } else {
-        updateState({
-          isProcessing: false,
-          progress: '',
-          error: result.error || 'Processing failed',
-          hadFallback: result.hadFallback
-        });
-        console.error('❌ useProcessing: GitHub processing failed:', result.error);
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       updateState({
         isProcessing: false,
         progress: '',
-        error: errorMessage
+        result
+      });
+      console.log('✅ useProcessing: GitHub processing completed successfully');
+    } catch (error) {
+      updateState({
+        isProcessing: false,
+        progress: '',
+        error: error instanceof Error ? error.message : 'Unknown error occurred'
       });
       console.error('❌ useProcessing: GitHub processing error:', error);
     }
-  }, [facade, updateState]);
+  }, [ingestionService, updateState]);
   
-  const processZipFile = useCallback(async (
-    file: File, 
-    options: GitNexusProcessingOptions = {}
-  ) => {
+  const processZipFile = useCallback(async (file: File) => {
     try {
       updateState({
         isProcessing: true,
         progress: 'Starting ZIP file processing...',
         error: '',
-        result: null,
-        hadFallback: false
+        result: null
       });
       
       console.log('🚀 useProcessing: Starting ZIP processing for:', file.name);
       
-      const processingOptions: GitNexusProcessingOptions = {
-        ...options,
-        onProgress: (progress) => {
-          updateState({ progress });
-          options.onProgress?.(progress);
-        },
-        onEngineSwitch: (from, to) => {
-          updateState({ 
-            hadFallback: true, 
-            fallbackEngine: to,
-            progress: `Engine fallback: ${from} → ${to}` 
-          });
-          options.onEngineSwitch?.(from, to);
-        }
-      };
+      const result = await ingestionService.processZipFile(file);
       
-      const result = await facade.processZipFile(file, processingOptions);
-      
-      if (result.success) {
-        updateState({
-          isProcessing: false,
-          progress: '',
-          result,
-          hadFallback: result.hadFallback
-        });
-        console.log('✅ useProcessing: ZIP processing completed successfully');
-      } else {
-        updateState({
-          isProcessing: false,
-          progress: '',
-          error: result.error || 'Processing failed',
-          hadFallback: result.hadFallback
-        });
-        console.error('❌ useProcessing: ZIP processing failed:', result.error);
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       updateState({
         isProcessing: false,
         progress: '',
-        error: errorMessage
+        result
+      });
+      console.log('✅ useProcessing: ZIP processing completed successfully');
+    } catch (error) {
+      updateState({
+        isProcessing: false,
+        progress: '',
+        error: error instanceof Error ? error.message : 'Unknown error occurred'
       });
       console.error('❌ useProcessing: ZIP processing error:', error);
     }
-  }, [facade, updateState]);
+  }, [ingestionService, updateState]);
   
   const clearError = useCallback(() => {
     updateState({ error: '' });
   }, [updateState]);
   
   const clearResult = useCallback(() => {
-    updateState({ 
-      result: null, 
-      error: '', 
-      progress: '', 
-      hadFallback: false,
-      fallbackEngine: undefined 
-    });
+    updateState({ result: null });
   }, [updateState]);
   
   return {

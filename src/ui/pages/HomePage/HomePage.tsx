@@ -3,8 +3,7 @@ import ErrorBoundary from '../../components/ErrorBoundary';
 import { GraphExplorer } from '../../components/graph';
 import { ChatInterface } from '../../components/chat';
 import ExportFormatModal from '../../components/ExportFormatModal';
-import EngineSelector from '../../components/engine/EngineSelector';
-import ProcessingStatus from '../../components/engine/ProcessingStatus';
+// Engine components removed - using simplified parsing mode toggle
 import RepositoryInput from '../../components/repository/RepositoryInput';
 import { useGitNexus } from '../../hooks/useGitNexus';
 import { exportAndDownloadGraph, exportAndDownloadGraphAsCSV } from '../../../lib/export';
@@ -19,7 +18,6 @@ const HomePage: React.FC = () => {
   const featureFlags = getFeatureFlags();
   const {
     state,
-    engine,
     processing,
     settings,
     handleNodeSelect,
@@ -35,9 +33,7 @@ const HomePage: React.FC = () => {
     // Could be extracted to settings if needed for persistence
   };
 
-  const handleEngineChange = async (engineType: any, reason?: string) => {
-    await engine.switchEngine(engineType, reason);
-  };
+  // Engine change handler removed - parsing mode controlled via .env
 
   const handleExport = async (format: ExportFormat) => {
     if (!state.graph) return;
@@ -83,68 +79,9 @@ const HomePage: React.FC = () => {
             onGitHubUrlChange={handleGitHubUrlChange}
           />
 
-          {featureFlags.showEngineSelector && (
-            <EngineSelector
-              currentEngine={engine.currentEngine}
-              availableEngines={engine.availableEngines}
-              onEngineChange={handleEngineChange}
-              showPerformanceInfo={featureFlags.showEnginePerformanceInfo}
-            />
-          )}
+          {/* Engine selector removed - parsing mode controlled via .env */}
 
-          {featureFlags.showEngineCapabilities && (
-            <div className="engine-info-panel">
-              <h3>🚀 Engine Capabilities</h3>
-              <div className="capabilities-grid">
-                {engine.availableEngines.map((eng) => (
-                  <div 
-                    key={eng.type} 
-                    className={`capability-item ${eng.type === engine.currentEngine ? 'active' : ''}`}
-                  >
-                    <div className="capability-header">
-                      <span className="capability-name">{eng.name}</span>
-                      <span className="capability-status">
-                        {eng.healthy ? '✅' : '⚠️'}
-                      </span>
-                    </div>
-                    <div className="capability-list">
-                      {eng.capabilities.map((cap) => (
-                        <span key={cap} className="capability-tag">
-                          {cap}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {featureFlags.showEnginePerformanceInfo && engine.performanceComparison && (
-            <div className="performance-panel">
-              <h3>📊 Performance Comparison</h3>
-              <div className="performance-stats">
-                <div className="stat-item">
-                  <span className="stat-label">Legacy Engine:</span>
-                  <span className="stat-value">
-                    {(engine.performanceComparison.legacy.processingTime / 1000).toFixed(1)}s
-                  </span>
-                </div>
-                <div className="stat-item">
-                  <span className="stat-label">Next-Gen Engine:</span>
-                  <span className="stat-value">
-                    {(engine.performanceComparison.nextgen.processingTime / 1000).toFixed(1)}s
-                  </span>
-                </div>
-                <div className="stat-item highlight">
-                  <span className="stat-label">Speedup:</span>
-                  <span className="stat-value">
-                    {engine.performanceComparison.comparison.speedupFactor.toFixed(1)}x
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
+          {/* Engine capabilities and performance panels removed - simplified architecture */}
         </main>
 
         <style>{`
@@ -315,26 +252,30 @@ const HomePage: React.FC = () => {
 
         <div className="main-layout">
           <aside className="sidebar">
-            {featureFlags.showEngineSelector && (
-              <EngineSelector
-                currentEngine={engine.currentEngine}
-                availableEngines={engine.availableEngines}
-                onEngineChange={handleEngineChange}
-                disabled={processing.state.isProcessing}
-              />
+            {/* Engine components removed - simplified processing status */}
+            {processing.state.isProcessing && (
+              <div className="processing-status">
+                <div className="processing-indicator">⚡ Processing...</div>
+                {processing.state.progress && (
+                  <div className="progress-text">{processing.state.progress}</div>
+                )}
+              </div>
             )}
-
-            <ProcessingStatus
-              isProcessing={processing.state.isProcessing}
-              progress={processing.state.progress}
-              error={processing.state.error}
-              currentEngine={engine.currentEngine}
-              hadFallback={processing.state.hadFallback}
-              fallbackEngine={processing.state.fallbackEngine}
-              processingTime={processing.state.result?.processingTime}
-              nodeCount={processing.state.result?.nodeCount}
-              relationshipCount={processing.state.result?.relationshipCount}
-            />
+            
+            {processing.state.error && (
+              <div className="error-message">
+                <strong>Error:</strong> {processing.state.error}
+              </div>
+            )}
+            
+            {processing.state.result && (
+              <div className="processing-results">
+                <div className="result-stats">
+                  <span>📊 {processing.state.result.graph.getNodes().length} nodes</span>
+                  <span>🔗 {processing.state.result.graph.getRelationships().length} relationships</span>
+                </div>
+              </div>
+            )}
 
             {state.graph && (
               <div className="graph-actions">
