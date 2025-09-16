@@ -4,11 +4,6 @@ GitNexus is a privacy-focused, zero-server knowledge graph generator that runs e
 
 https://github.com/user-attachments/assets/6f13bd45-d6e9-4f4e-a360-ceb66f41c741
 
-<<<<<<< HEAD
-GitNexus converts codebases into interactive knowledge graphs. Upload a GitHub repository or ZIP file to analyze code structure, dependencies, and relationships. Includes AI chat for code exploration.
-=======
-
->>>>>>> 0890d066b1bdb6f5e10b97a909ca5044bcc31680
 
 ## Features
 
