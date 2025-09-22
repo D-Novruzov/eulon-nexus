@@ -286,9 +286,17 @@ class KuzuInstanceImpl implements KuzuInstance {
       const columns = result.getColumnNames();
       const rows: any[][] = [];
 
-      // Fetch all rows
+      // Fetch all rows and handle BigInt serialization
       while (result.hasNext()) {
-        rows.push(result.getNext());
+        const row = result.getNext();
+        // Convert BigInt values to strings to avoid serialization issues
+        const processedRow = row.map(cell => {
+          if (typeof cell === 'bigint') {
+            return cell.toString();
+          }
+          return cell;
+        });
+        rows.push(processedRow);
       }
 
       result.close();

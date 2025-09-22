@@ -70,21 +70,11 @@ export class IngestionService {
         throw new Error(result.error || 'Processing failed');
       }
 
+      // Recreate the appropriate graph based on worker metadata
+      const graph = await this.recreateGraphFromResult(result);
+      
       return {
-        graph: {
-          nodes: result.nodes || [],
-          relationships: result.relationships || [],
-          addNode: () => {},
-          addRelationship: () => {},
-          removeNode: () => {},
-          removeRelationship: () => {},
-          clear: () => {},
-          getNodeById: () => null,
-          getRelationshipById: () => null,
-          getNodesByLabel: () => [],
-          getRelationshipsByType: () => [],
-          getConnectedNodes: () => ({ incoming: [], outgoing: [] })
-        },
+        graph,
         fileContents
       };
     } finally {
@@ -137,21 +127,11 @@ export class IngestionService {
         throw new Error(result.error || 'Processing failed');
       }
 
+      // Recreate the appropriate graph based on worker metadata
+      const graph = await this.recreateGraphFromResult(result);
+      
       return {
-        graph: {
-          nodes: result.nodes || [],
-          relationships: result.relationships || [],
-          addNode: () => {},
-          addRelationship: () => {},
-          removeNode: () => {},
-          removeRelationship: () => {},
-          clear: () => {},
-          getNodeById: () => null,
-          getRelationshipById: () => null,
-          getNodesByLabel: () => [],
-          getRelationshipsByType: () => [],
-          getConnectedNodes: () => ({ incoming: [], outgoing: [] })
-        },
+        graph,
         fileContents
       };
     } finally {
@@ -218,5 +198,65 @@ export class IngestionService {
     }
 
     return structure; // No normalization if prefix isn't common enough
+  }
+
+  /**
+   * Recreate the appropriate graph type based on worker result metadata
+   */
+  private async recreateGraphFromResult(result: any): Promise<KnowledgeGraph> {
+    console.log(`📊 Recreating graph: type=${result.graphType}, kuzuEnabled=${result.kuzuEnabled}`);
+    
+    if (result.graphType === 'DualWriteKnowledgeGraph' && result.kuzuEnabled) {
+      try {
+        // Recreate DualWriteKnowledgeGraph with KuzuDB
+        console.log('🚀 Recreating DualWriteKnowledgeGraph with KuzuDB...');
+        
+        // Initialize KuzuDB query engine
+        const { KuzuQueryEngine } = await import('../core/graph/kuzu-query-engine.ts');
+        const queryEngine = new KuzuQueryEngine({
+          enableCache: true,
+          cacheSize: 1000,
+          cacheTTL: 5 * 60 * 1000 // 5 minutes
+        });
+        
+        await queryEngine.initialize();
+        
+        // Create KuzuDB knowledge graph
+        const { KuzuKnowledgeGraph } = await import('../core/graph/kuzu-knowledge-graph.ts');
+        const kuzuGraph = new KuzuKnowledgeGraph(queryEngine, {
+          enableCache: true,
+          batchSize: 100,
+          autoCommit: false
+        });
+        
+        // Create dual-write graph
+        const { DualWriteKnowledgeGraph } = await import('../core/graph/dual-write-knowledge-graph.ts');
+        const dualWriteGraph = new DualWriteKnowledgeGraph(kuzuGraph);
+        
+        // Add the data from worker result
+        (result.nodes || []).forEach((node: any) => dualWriteGraph.addNode(node));
+        (result.relationships || []).forEach((rel: any) => dualWriteGraph.addRelationship(rel));
+        
+        // Commit to KuzuDB
+        await dualWriteGraph.flushKuzuDB();
+        
+        console.log('✅ Successfully recreated DualWriteKnowledgeGraph with KuzuDB');
+        return dualWriteGraph;
+        
+      } catch (error) {
+        console.warn('❌ Failed to recreate DualWriteKnowledgeGraph, falling back to SimpleKnowledgeGraph:', error);
+      }
+    }
+    
+    // Fallback to SimpleKnowledgeGraph
+    console.log('📄 Creating SimpleKnowledgeGraph fallback');
+    const { SimpleKnowledgeGraph } = await import('../core/graph/graph.ts');
+    const simpleGraph = new SimpleKnowledgeGraph();
+    
+    // Add nodes and relationships from result
+    (result.nodes || []).forEach((node: any) => simpleGraph.addNode(node));
+    (result.relationships || []).forEach((rel: any) => simpleGraph.addRelationship(rel));
+    
+    return simpleGraph;
   }
 } 

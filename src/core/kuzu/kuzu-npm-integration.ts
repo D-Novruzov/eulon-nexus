@@ -156,13 +156,23 @@ function createKuzuInstance(): KuzuInstance {
         
         // Extract data from kuzu-wasm result
         const columns = result.getColumnNames();
-        const rows = await result.getAllRows(); // Get all rows at once (async)
+        const rawRows = await result.getAllRows(); // Get all rows at once (async)
         const rowCount = await result.getNumTuples(); // This might be async too
+        
+        // Convert BigInt values to strings to avoid serialization issues
+        const rows = rawRows.map(row => 
+          row.map(cell => {
+            if (typeof cell === 'bigint') {
+              return cell.toString();
+            }
+            return cell;
+          })
+        );
         
         const queryResult: QueryResult = {
           columns,
           rows,
-          rowCount,
+          rowCount: typeof rowCount === 'bigint' ? Number(rowCount) : rowCount,
           executionTime: 0 // TODO: Add timing if available
         };
         

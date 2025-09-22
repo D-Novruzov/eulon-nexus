@@ -107,8 +107,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   // Services
   const [llmService] = useState(new LLMService());
   const [cypherGenerator] = useState(new CypherGenerator(llmService));
-  // KuzuDB query engine removed - using graph directly
-  const [ragOrchestrator] = useState(new ReActAgent(llmService, cypherGenerator, graph));
+  // Create ReActAgent with initial graph, will be updated in useEffect
+  const [ragOrchestrator] = useState(() => new ReActAgent(llmService, cypherGenerator, graph));
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -118,6 +118,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     const initializeOrchestrator = async () => {
       try {
         await ragOrchestrator.initialize();
+        
+        // Update graph reference in ReActAgent
+        if (graph) {
+          (ragOrchestrator as any).graph = graph;
+          console.log('✅ Updated graph reference in ReActAgent:', graph.constructor.name);
+        }
         
         // Only set context if we have valid graph data
         if (graph && graph.nodes && graph.nodes.length > 0) {

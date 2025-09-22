@@ -22,11 +22,14 @@ export interface IngestionResult {
     callStats: { totalCalls: number; callTypes: Record<string, number> };
   };
   duration: number;
+  graphType?: 'DualWriteKnowledgeGraph' | 'SimpleKnowledgeGraph';
+  kuzuEnabled?: boolean;
 }
 
 export class IngestionWorker {
   private pipeline: GraphPipeline | ParallelGraphPipeline;
   private progressCallback?: (progress: IngestionProgress) => void;
+  private currentGraph: KnowledgeGraph | null = null;
 
   constructor() {
     // Choose pipeline based on feature flag - same logic as main thread
@@ -99,6 +102,9 @@ export class IngestionWorker {
         fileContents: fileContentsMap
       });
       
+      // Store the graph for later access
+      this.currentGraph = graph;
+      
       // Note: Keeping file contents available for UI components
       // fileContentsMap.clear(); // Commented out to preserve file contents for SourceViewer
       
@@ -119,6 +125,12 @@ export class IngestionWorker {
         relationshipStats[rel.type] = (relationshipStats[rel.type] || 0) + 1;
       });
 
+      // Determine graph type and KuzuDB status
+      const graphType = graph.constructor.name === 'DualWriteKnowledgeGraph' ? 'DualWriteKnowledgeGraph' : 'SimpleKnowledgeGraph';
+      const kuzuEnabled = graphType === 'DualWriteKnowledgeGraph' && 'isKuzuDBEnabled' in graph && (graph as any).isKuzuDBEnabled();
+      
+      console.log(`📊 Worker returning graph type: ${graphType}, KuzuDB enabled: ${kuzuEnabled}`);
+      
       // Return only serializable data - nodes and relationships arrays
       return {
         success: true,
@@ -129,7 +141,9 @@ export class IngestionWorker {
           relationshipStats,
           callStats: { totalCalls: 0, callTypes: {} }
         },
-        duration
+        duration,
+        graphType: graphType as 'DualWriteKnowledgeGraph' | 'SimpleKnowledgeGraph',
+        kuzuEnabled
       };
     } catch (error) {
       console.error('IngestionWorker: Processing failed:', error);
@@ -254,6 +268,7 @@ export class IngestionWorker {
     // Cleanup resources if needed
     console.log('Ingestion worker terminated');
   }
+
 }
 
 // Expose the worker class via Comlink

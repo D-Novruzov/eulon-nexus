@@ -62,10 +62,12 @@ export class ReActAgent {
   private cypherGenerator: CypherGenerator;
   private context: ReActContext | null = null;
   private chatHistory: LocalStorageChatHistory | null = null;
+  private graph?: KnowledgeGraph;
 
-  constructor(llmService: LLMService, cypherGenerator: CypherGenerator, _kuzuQueryEngine?: any) {
+  constructor(llmService: LLMService, cypherGenerator: CypherGenerator, graph?: KnowledgeGraph) {
     this.llmService = llmService;
     this.cypherGenerator = cypherGenerator;
+    this.graph = graph; // Store graph reference for KuzuDB access
   }
 
   /**
@@ -85,7 +87,33 @@ export class ReActAgent {
       projectName: context.projectName,
       sessionId: context.sessionId
     };
+    
+    // Update graph reference for KuzuDB access
+    this.graph = context.graph;
+    
     this.cypherGenerator.updateSchema(context.graph);
+    
+    // Test KuzuDB connectivity
+    await this.testKuzuDBConnection();
+  }
+  
+  /**
+   * Test KuzuDB connection and log results
+   */
+  private async testKuzuDBConnection(): Promise<void> {
+    try {
+      console.log('🧪 Testing KuzuDB connection...');
+      const testResult = await this.executeGraphQuery('MATCH (n) RETURN COUNT(n) as nodeCount LIMIT 1');
+      
+      if (testResult.success && testResult.source === 'KuzuDB') {
+        console.log('✅ KuzuDB connection test successful!');
+        console.log(`📊 Total nodes in KuzuDB: ${testResult.rows[0]?.[0] || 'unknown'}`);
+      } else {
+        console.log('⚠️ KuzuDB connection test failed, using fallback');
+      }
+    } catch (error) {
+      console.log('❌ KuzuDB connection test error:', error);
+    }
   }
 
   /**
@@ -352,8 +380,23 @@ CRITICAL: The action field must be exactly one of these four values: query_graph
               maxRetries: 3
             });
             
-            // Execute the query (placeholder - implement based on your graph engine)
-            const results = await this.executeGraphQuery(cypherQuery.cypher);
+            // Add LIMIT if not present to prevent JSON truncation issues
+            let finalCypher = cypherQuery.cypher;
+            if (!finalCypher.toLowerCase().includes('limit')) {
+              finalCypher += ' LIMIT 20';
+            }
+            
+            // Execute the query
+            const results = await this.executeGraphQuery(finalCypher);
+            
+            // Truncate large responses to prevent JSON parsing issues
+            if (results.rows && results.rows.length > 20) {
+              results.rows = results.rows.slice(0, 20);
+              results.rowCount = 20;
+              results.truncated = true;
+              results.summary += ' (showing first 20 results)';
+            }
+            
             output = JSON.stringify(results, null, 2);
             success = true;
           } catch (error) {
@@ -424,12 +467,93 @@ CRITICAL: The action field must be exactly one of these four values: query_graph
   }
 
   /**
-   * Execute a graph query (placeholder implementation)
+   * Execute a graph query using KuzuDB if available, fallback to JSON graph
    */
   private async executeGraphQuery(cypher: string): Promise<any> {
-    // This is a placeholder - implement based on your graph engine
-    console.log('Executing Cypher query:', cypher);
-    return { nodes: [], relationships: [], message: 'Graph query executed (placeholder)' };
+    console.log('🔍 ReActAgent executing Cypher query:', cypher);
+    
+    // Try to get KuzuQueryEngine from DualWriteKnowledgeGraph
+    if (this.graph && 'getKuzuGraph' in this.graph) {
+      const kuzuGraph = (this.graph as any).getKuzuGraph();
+      if (kuzuGraph && 'executeQuery' in kuzuGraph) {
+        try {
+          console.log('🚀 Using KuzuDB for query execution');
+          const result = await kuzuGraph.executeQuery(cypher);
+          
+          // Format result for AI consumption
+          const formattedResult = {
+            success: true,
+            source: 'KuzuDB',
+            columns: result.columns || [],
+            rows: result.rows || [],
+            rowCount: result.rowCount || result.rows?.length || 0,
+            executionTime: result.executionTime || 0,
+            // Add human-readable summary
+            summary: `Found ${result.rowCount || result.rows?.length || 0} results in ${result.executionTime || 0}ms`
+          };
+          
+          console.log(`✅ KuzuDB query successful: ${formattedResult.rowCount} rows returned`);
+          return formattedResult;
+          
+        } catch (error) {
+          console.error('❌ KuzuDB query failed:', error);
+          console.log('🔄 Falling back to JSON graph query');
+          
+          // Return error info for AI to understand what went wrong
+          return {
+            success: false,
+            source: 'KuzuDB',
+            error: error instanceof Error ? error.message : 'Unknown error',
+            fallback: 'Attempting JSON graph query...'
+          };
+        }
+      }
+    }
+    
+    // Fallback to JSON graph query
+    console.log('📊 Using JSON graph fallback');
+    return this.fallbackGraphQuery(cypher);
+  }
+
+  /**
+   * Fallback graph query using the JSON graph and GraphQueryEngine
+   */
+  private async fallbackGraphQuery(cypher: string): Promise<any> {
+    if (!this.context?.graph) {
+      return { 
+        nodes: [], 
+        relationships: [], 
+        message: 'No graph context available',
+        success: false,
+        source: 'none'
+      };
+    }
+    
+    try {
+      // Use existing GraphQueryEngine for fallback
+      const { GraphQueryEngine } = await import('../core/graph/query-engine.ts');
+      const queryEngine = new GraphQueryEngine(this.context.graph);
+      
+      console.log('📄 Using JSON graph fallback for query execution');
+      const result = queryEngine.executeQuery(cypher);
+      return {
+        nodes: result.nodes,
+        relationships: result.relationships,
+        data: result.data,
+        success: true,
+        source: 'JSON'
+      };
+    } catch (error) {
+      console.error('❌ Fallback query failed:', error);
+      return { 
+        nodes: [], 
+        relationships: [], 
+        message: 'Query execution failed', 
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        source: 'error'
+      };
+    }
   }
 
   /**
