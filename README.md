@@ -1,9 +1,13 @@
 # GitNexus - Fully Client sided Knowledge Graph Generator and Graph RAG Agent
 
-( AI Agent is currently WIP )
+
 GitNexus is a privacy-focused, zero-server knowledge graph generator that runs entirely in your browser. It transforms codebases into interactive knowledge graphs using advanced AST parsing, multi-threaded Web Workers, and an embedded KuzuDB WASM database. Features a Graph RAG agent for intelligent code exploration through natural language queries using cypher queries executed directly against the in-browser graph database.
 
 https://github.com/user-attachments/assets/6f13bd45-d6e9-4f4e-a360-ceb66f41c741
+
+## Current Work in Progress:
+
+Switch to bulk COPY into Kuzu DB from Batch writing. Should prevent Error ( RangeError: Maximum call stack size exceeded ) and should improve speed by about 50%, especially for large codebases
 
 
 ## Features
