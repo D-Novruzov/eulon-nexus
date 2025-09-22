@@ -163,10 +163,91 @@ export class DualWriteKnowledgeGraph implements KnowledgeGraph {
       try {
         await this.kuzuGraph.commitAll();
         console.log('✅ KuzuDB operations flushed successfully');
+        
+        // Verify KuzuDB has data by running test queries
+        await this.verifyKuzuDBData();
       } catch (error) {
         console.error('❌ Failed to flush KuzuDB operations:', error);
         this.dualWriteStats.kuzuErrors++;
       }
+    }
+  }
+
+  /**
+   * Verify KuzuDB contains expected data by running test queries
+   */
+  private async verifyKuzuDBData(): Promise<void> {
+    if (!this.kuzuGraph || !('executeQuery' in this.kuzuGraph)) {
+      console.log('⚠️ Cannot verify KuzuDB data - no query interface available');
+      return;
+    }
+
+    try {
+      console.log('🔍 Verifying KuzuDB data...');
+      
+      // Test query 1: Count all nodes
+      const nodeCountResult = await (this.kuzuGraph as any).executeQuery('MATCH (n) RETURN COUNT(n) as nodeCount');
+      const nodeCount = nodeCountResult.rows?.[0]?.[0] || 0;
+      console.log(`📊 KuzuDB Verification - Total nodes: ${nodeCount}`);
+
+      // Test query 2: Count all relationships  
+      const relCountResult = await (this.kuzuGraph as any).executeQuery('MATCH ()-[r]->() RETURN COUNT(r) as relCount');
+      const relCount = relCountResult.rows?.[0]?.[0] || 0;
+      console.log(`📊 KuzuDB Verification - Total relationships: ${relCount}`);
+
+      // Test query 3: Count nodes by type (KuzuDB-compatible)
+      // Query each node table separately since KuzuDB doesn't have labels() function
+      const nodeTypes = ['Function', 'Class', 'Method', 'File', 'Variable', 'Interface', 'Type', 'Import', 'Project', 'Folder'];
+      console.log('📊 KuzuDB Verification - Node types:');
+      
+      for (const nodeType of nodeTypes) {
+        try {
+          const result = await (this.kuzuGraph as any).executeQuery(`MATCH (n:${nodeType}) RETURN COUNT(n) as count`);
+          const count = result.rows?.[0]?.[0] || 0;
+          if (count > 0) {
+            console.log(`  ${nodeType}: ${count} nodes`);
+          }
+        } catch (error) {
+          // Node type might not exist in this database, skip silently
+        }
+      }
+
+      // Test query 4: Count relationships by type (KuzuDB-compatible)
+      // Query each relationship table separately since KuzuDB doesn't have type() function
+      const relTypes = ['CONTAINS', 'CALLS', 'INHERITS', 'IMPLEMENTS', 'OVERRIDES', 'IMPORTS', 'DEFINES', 'BELONGS_TO', 'USES', 'ACCESSES', 'EXTENDS'];
+      console.log('📊 KuzuDB Verification - Relationship types:');
+      
+      for (const relType of relTypes) {
+        try {
+          const result = await (this.kuzuGraph as any).executeQuery(`MATCH ()-[r:${relType}]->() RETURN COUNT(r) as count`);
+          const count = result.rows?.[0]?.[0] || 0;
+          if (count > 0) {
+            console.log(`  ${relType}: ${count} relationships`);
+          }
+        } catch (error) {
+          // Relationship type might not exist in this database, skip silently
+        }
+      }
+
+      // Test query 5: Sample some actual data
+      const sampleResult = await (this.kuzuGraph as any).executeQuery(`
+        MATCH (f:Function) 
+        RETURN f.name, f.filePath, f.startLine 
+        LIMIT 5
+      `);
+      
+      if (sampleResult.rows && sampleResult.rows.length > 0) {
+        console.log('📊 KuzuDB Verification - Sample functions:');
+        sampleResult.rows.forEach((row: any) => {
+          console.log(`  ${row[0]} (${row[1]}:${row[2]})`);
+        });
+      }
+
+      console.log('✅ KuzuDB verification completed successfully');
+      
+    } catch (error) {
+      console.error('❌ KuzuDB verification failed:', error);
+      console.error('❌ This indicates the data may not be properly stored in KuzuDB');
     }
   }
 }

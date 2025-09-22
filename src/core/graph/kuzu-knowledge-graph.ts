@@ -503,27 +503,37 @@ export class KuzuKnowledgeGraph implements KnowledgeGraph {
       const relCountResult = await this.queryEngine.executeQuery('MATCH ()-[r]->() RETURN COUNT(r) as count');
       const relationshipCount = relCountResult.rows[0]?.[0] || 0;
 
-      // Get nodes by label
-      const nodesByLabelResult = await this.queryEngine.executeQuery(`
-        MATCH (n) 
-        RETURN labels(n)[0] as label, COUNT(n) as count 
-        ORDER BY count DESC
-      `);
+      // Get nodes by label (KuzuDB-compatible)
       const nodesByLabel: Record<string, number> = {};
-      nodesByLabelResult.rows.forEach(row => {
-        nodesByLabel[row[0]] = row[1];
-      });
+      const nodeTypes = ['Function', 'Class', 'Method', 'File', 'Variable', 'Interface', 'Type', 'Import', 'Project', 'Folder'];
+      
+      for (const nodeType of nodeTypes) {
+        try {
+          const result = await this.queryEngine.executeQuery(`MATCH (n:${nodeType}) RETURN COUNT(n) as count`);
+          const count = result.rows?.[0]?.[0] || 0;
+          if (count > 0) {
+            nodesByLabel[nodeType] = count;
+          }
+        } catch (error) {
+          // Node type might not exist in this database, skip silently
+        }
+      }
 
-      // Get relationships by type
-      const relsByTypeResult = await this.queryEngine.executeQuery(`
-        MATCH ()-[r]->() 
-        RETURN type(r) as type, COUNT(r) as count 
-        ORDER BY count DESC
-      `);
+      // Get relationships by type (KuzuDB-compatible)
       const relationshipsByType: Record<string, number> = {};
-      relsByTypeResult.rows.forEach(row => {
-        relationshipsByType[row[0]] = row[1];
-      });
+      const relTypes = ['CONTAINS', 'CALLS', 'INHERITS', 'IMPLEMENTS', 'OVERRIDES', 'IMPORTS', 'DEFINES', 'BELONGS_TO', 'USES', 'ACCESSES', 'EXTENDS'];
+      
+      for (const relType of relTypes) {
+        try {
+          const result = await this.queryEngine.executeQuery(`MATCH ()-[r:${relType}]->() RETURN COUNT(r) as count`);
+          const count = result.rows?.[0]?.[0] || 0;
+          if (count > 0) {
+            relationshipsByType[relType] = count;
+          }
+        } catch (error) {
+          // Relationship type might not exist in this database, skip silently
+        }
+      }
 
       return {
         nodeCount,

@@ -157,7 +157,7 @@ function createKuzuInstance(): KuzuInstance {
         // Extract data from kuzu-wasm result
         const columns = result.getColumnNames();
         const rows = await result.getAllRows(); // Get all rows at once (async)
-        const rowCount = result.getNumTuples();
+        const rowCount = await result.getNumTuples(); // This might be async too
         
         const queryResult: QueryResult = {
           columns,
