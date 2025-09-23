@@ -42,10 +42,10 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   enableParallelParsing: true,
   enableParallelProcessing: true,
   
-  // KuzuDB Features (disabled by default for safety)
-  enableKuzuDB: false,
-  enableKuzuDBPersistence: false,
-  enableKuzuDBPerformanceMonitoring: false,
+  // KuzuDB Features (enabled by default to match gitnexus.config.ts)
+  enableKuzuDB: true,
+  enableKuzuDBPersistence: true,
+  enableKuzuDBPerformanceMonitoring: true,
   
   // Debug Features
   enableDebugMode: false,

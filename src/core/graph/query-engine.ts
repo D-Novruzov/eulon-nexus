@@ -34,6 +34,8 @@ export class GraphQueryEngine {
           return this.executeAggregationQuery(parsedQuery, limit, offset);
         case 'MATCH_RELATIONSHIP':
           return this.executeRelationshipQuery(parsedQuery, limit, offset);
+        case 'COUNT_ALL':
+          return this.executeCountAllQuery(parsedQuery);
         default:
           throw new Error(`Unsupported query type: ${parsedQuery.type}`);
       }
@@ -76,6 +78,20 @@ export class GraphQueryEngine {
         targetVar,
         targetLabel,
         returnClause: returnClause.trim()
+      };
+    }
+
+    // Count all nodes pattern: MATCH (n) RETURN COUNT(n)
+    const countAllPattern = /MATCH\s+\((\w+)\)\s+RETURN\s+COUNT\(\1\)(?:\s+as\s+(\w+))?(?:\s+LIMIT\s+\d+)?/i;
+    const countAllMatch = cypher.match(countAllPattern);
+    
+    if (countAllMatch) {
+      const [, variable, alias] = countAllMatch;
+      return {
+        type: 'COUNT_ALL',
+        variable,
+        alias: alias || 'count',
+        returnClause: `COUNT(${variable})`
       };
     }
 
@@ -460,6 +476,19 @@ export class GraphQueryEngine {
       
       return searchableText.includes(lowerSearch);
     });
+  }
+
+  private executeCountAllQuery(query: any): QueryResult {
+    const totalCount = this.graph.nodes.length;
+    
+    const result: Record<string, any> = {};
+    result[query.alias] = totalCount;
+    
+    return {
+      nodes: [],
+      relationships: [],
+      data: [result]
+    };
   }
 
   /**

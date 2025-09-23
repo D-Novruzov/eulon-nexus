@@ -240,8 +240,15 @@ export class ParallelGraphPipeline {
   /**
    * Get optimal worker count for current system
    */
-  public static getOptimalWorkerCount(): number {
-    return WebWorkerPoolUtils.getOptimalWorkerCount('cpu');
+  public static async getOptimalWorkerCount(): Promise<number> {
+    // Worker count is now determined by configuration
+    const { ConfigLoader } = await import('../../config/config-loader.ts');
+    const { calculateWorkerCount } = await import('../../lib/worker-calculator.ts');
+    
+    const config = await ConfigLoader.getInstance().loadConfig();
+    const workerCalc = await calculateWorkerCount(config);
+    
+    return workerCalc.workerCount;
   }
 
   /**

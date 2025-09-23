@@ -14,13 +14,8 @@ import { WebWorkerPoolUtils } from './web-worker-pool.js';
 export function initializeWorkerPoolCleanup(): void {
   console.log('Initializing worker pool cleanup handlers...');
   
-  // Setup global cleanup handlers
-  WebWorkerPoolUtils.setupGlobalCleanup();
-  
-  // Start periodic memory monitoring (every 2 minutes)
-  setInterval(() => {
-    WebWorkerPoolUtils.monitorMemoryUsage();
-  }, 120000);
+  // Memory monitoring is now handled by MemoryManager and individual processors
+  console.log('💾 Memory monitoring delegated to MemoryManager');
   
   console.log('Worker pool cleanup handlers initialized');
 }

@@ -11,8 +11,19 @@ import { z } from 'zod';
 
 const ProcessingConfigSchema = z.object({
   mode: z.enum(['parallel', 'single']),
+  workers: z.object({
+    mode: z.enum(['auto', 'manual']),
+    auto: z.object({
+      enabled: z.boolean(),
+      maxWorkers: z.number().min(1).max(32),
+      memoryPerWorkerMB: z.number().min(20).max(200),
+      cpuMultiplier: z.number().min(0.1).max(2.0)
+    }),
+    manual: z.object({
+      count: z.number().min(1).max(32)
+    })
+  }),
   parallel: z.object({
-    maxWorkers: z.number().min(1).max(16),
     batchSize: z.number().min(1).max(100),
     workerTimeoutMs: z.number().min(10000).max(300000)
   }),
@@ -182,8 +193,19 @@ export class ConfigLoader {
     return {
       processing: {
         mode: 'parallel',
+        workers: {
+          mode: 'auto',
+          auto: {
+            enabled: true,
+            maxWorkers: 16,
+            memoryPerWorkerMB: 60,
+            cpuMultiplier: 0.75
+          },
+          manual: {
+            count: 4
+          }
+        },
         parallel: {
-          maxWorkers: 4,
           batchSize: 20,
           workerTimeoutMs: 60000
         },

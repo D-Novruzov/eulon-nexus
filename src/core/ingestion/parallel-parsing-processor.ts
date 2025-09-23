@@ -67,11 +67,8 @@ export interface ParallelParsingResult {
 
 	constructor() {
 		this.memoryManager = MemoryManager.getInstance();
-		this.workerPool = WebWorkerPoolUtils.createCPUPool({
-			workerScript: '/workers/tree-sitter-worker.js',
-			name: 'ParallelParsingPool',
-			timeout: 60000 // 60 seconds for parsing
-		});
+		// Worker pool will be initialized asynchronously in initializeWorkerPool()
+		this.workerPool = null as any; // Temporary until initialization
 	}
 
   public getASTMap(): Map<string, ParsedAST> {
@@ -95,6 +92,12 @@ export interface ParallelParsingResult {
 			if (!WebWorkerPoolUtils.isSupported()) {
 				throw new Error('Web Workers are not supported in this environment');
 			}
+
+			// Create worker pool using configuration
+			this.workerPool = await WebWorkerPoolUtils.createWorkerPool({
+				workerScript: '/workers/tree-sitter-worker.js',
+				name: 'ParallelParsingPool'
+			});
 
 			// Set up worker pool event listeners
 			this.workerPool.on('workerCreated', (data: unknown) => {
@@ -629,7 +632,8 @@ export interface ParallelParsingResult {
 			}
 			
 			// Monitor worker pool memory usage
-			WebWorkerPoolUtils.monitorMemoryUsage();
+			// Memory monitoring is now handled by the MemoryManager
+			console.log('💾 Memory monitoring active via MemoryManager');
 			
 		} catch (error) {
 			console.warn('Error monitoring memory usage:', error);

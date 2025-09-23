@@ -480,48 +480,44 @@ export class FileProcessingPool extends WebWorkerPool {
 }
 
 /**
- * Worker pool utilities
+ * Worker pool utilities - simplified for GitNexus
  */
 export const WebWorkerPoolUtils = {
   /**
-   * Create a specialized worker pool for CPU-intensive tasks
+   * Create a worker pool using GitNexus configuration
    */
-  createCPUPool(options: Partial<WorkerPoolOptions> = {}): WebWorkerPool {
-    return new WebWorkerPool({
-      maxWorkers: navigator.hardwareConcurrency || 4,
-      timeout: 60000, // 1 minute
-      name: 'CPUPool',
-      ...options
-    });
-  },
-
-  /**
-   * Create a worker pool for I/O operations
-   */
-  createIOPool(options: Partial<WorkerPoolOptions> = {}): WebWorkerPool {
-    return new WebWorkerPool({
-      maxWorkers: Math.min(20, (navigator.hardwareConcurrency || 4) * 4), // More workers for I/O
-      timeout: 30000, // 30 seconds
-      name: 'IOPool',
-      ...options
-    });
-  },
-
-  /**
-   * Get optimal worker count for different task types
-   */
-  getOptimalWorkerCount(taskType: 'cpu' | 'io' | 'mixed' = 'mixed'): number {
-    const cpuCount = navigator.hardwareConcurrency || 4;
+  async createWorkerPool(options: Partial<WorkerPoolOptions> = {}): Promise<WebWorkerPool> {
+    // Import config loader dynamically to avoid circular dependencies
+    const { ConfigLoader } = await import('../config/config-loader.ts');
+    const { calculateWorkerCount } = await import('./worker-calculator.ts');
     
-    switch (taskType) {
-      case 'cpu':
-        return cpuCount;
-      case 'io':
-        return Math.min(20, cpuCount * 4);
-      case 'mixed':
-      default:
-        return Math.max(2, Math.min(8, cpuCount));
-    }
+    const config = await ConfigLoader.getInstance().loadConfig();
+    const workerCalc = await calculateWorkerCount(config);
+    
+    console.log(''); // Empty line for better readability
+    console.log('🔧 GitNexus Worker Pool Initialization');
+    console.log('='.repeat(50));
+    
+    const workerPool = new WebWorkerPool({
+      maxWorkers: workerCalc.workerCount,
+      timeout: config.processing.parallel.workerTimeoutMs,
+      name: 'GitNexusWorkerPool',
+      ...options
+    });
+    
+    console.log('='.repeat(50));
+    console.log('✅ Worker pool created successfully');
+    console.log(''); // Empty line for better readability
+    
+    return workerPool;
+  },
+
+  /**
+   * Legacy method - redirects to new simplified approach
+   * @deprecated Use createWorkerPool() instead
+   */
+  createCPUPool(options: Partial<WorkerPoolOptions> = {}): Promise<WebWorkerPool> {
+    return this.createWorkerPool(options);
   },
 
   /**
@@ -532,60 +528,22 @@ export const WebWorkerPoolUtils = {
   },
 
   /**
-   * Get hardware concurrency
+   * Get system information for debugging
    */
-  getHardwareConcurrency(): number {
-    return navigator.hardwareConcurrency || 4;
+  async getSystemInfo() {
+    const { getSystemInfoForDebug } = await import('./worker-calculator.ts');
+    return getSystemInfoForDebug();
   },
 
   /**
    * Cleanup all singleton worker pool instances
    */
   async cleanupAllPools(): Promise<void> {
-    await FileProcessingPool.shutdownInstance();
-  },
-
-  /**
-   * Monitor memory usage and trigger cleanup if needed
-   */
-  monitorMemoryUsage(): void {
-    if (typeof performance !== 'undefined' && (performance as PerformanceWithMemory).memory) {
-      const memInfo = (performance as PerformanceWithMemory).memory!
-      const usedMemoryMB = memInfo.usedJSHeapSize / (1024 * 1024);
-      const totalMemoryMB = memInfo.totalJSHeapSize / (1024 * 1024);
-      
-      console.log(`Memory usage: ${usedMemoryMB.toFixed(2)}MB / ${totalMemoryMB.toFixed(2)}MB`);
-      
-      // If memory usage is over 80%, trigger cleanup
-      if (usedMemoryMB / totalMemoryMB > 0.8) {
-        console.warn('High memory usage detected, triggering cleanup...');
-        this.cleanupAllPools();
-        
-        // Suggest garbage collection if available
-        if (typeof window !== 'undefined' && (window as WindowWithGC).gc) {
-          (window as WindowWithGC).gc!();
-        }
-      }
+    // Cleanup FileProcessingPool if it exists
+    if (FileProcessingPool.hasInstance()) {
+      await FileProcessingPool.shutdownInstance();
     }
-  },
-
-  /**
-   * Setup global cleanup handlers for when the app/page unloads
-   */
-  setupGlobalCleanup(): void {
-    if (typeof window !== 'undefined') {
-      // Cleanup on page unload
-      window.addEventListener('beforeunload', async () => {
-        await this.cleanupAllPools();
-      });
-      
-      // Cleanup on page visibility change (when user switches tabs)
-      document.addEventListener('visibilitychange', () => {
-        if (document.hidden) {
-          // Page is now hidden, good time to cleanup
-          this.cleanupAllPools();
-        }
-      });
-    }
+    
+    console.log('🧹 Worker pool cleanup completed');
   }
 };
