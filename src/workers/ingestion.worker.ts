@@ -1,7 +1,7 @@
 import * as Comlink from 'comlink';
 import { GraphPipeline, type PipelineInput } from '../core/ingestion/pipeline.ts';
 import { ParallelGraphPipeline } from '../core/ingestion/parallel-pipeline.ts';
-import { isParallelParsingEnabled } from '../config/feature-flags.ts';
+import { isParallelParsingEnabled } from '../config/features.ts';
 import type { KnowledgeGraph, GraphNode, GraphRelationship } from '../core/graph/types.ts';
 
 export interface IngestionProgress {

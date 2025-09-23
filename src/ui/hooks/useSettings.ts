@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { featureFlagManager } from '../../config/feature-flags';
+import { featureFlagManager } from '../../config/features.ts';
 import type { LLMProvider } from '../../ai/llm-service';
 
 type ParsingMode = 'single' | 'parallel';

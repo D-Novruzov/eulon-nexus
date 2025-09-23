@@ -9,7 +9,7 @@
 import type { KnowledgeGraph, GraphNode, GraphRelationship } from './types.ts';
 import type { KuzuInstance, QueryResult } from '../kuzu/kuzu-loader.ts';
 import { initKuzuDB } from '../kuzu/kuzu-loader.ts';
-import { isKuzuDBEnabled, isKuzuDBPersistenceEnabled } from '../../config/feature-flags.ts';
+import { isKuzuDBEnabled, isKuzuDBPersistenceEnabled } from '../../config/features.ts';
 
 export interface QueryOptions {
   timeout?: number;

@@ -9,7 +9,7 @@
 import type { KnowledgeGraph, GraphNode, GraphRelationship } from '../graph/types.ts';
 import { KuzuQueryEngine } from '../graph/kuzu-query-engine.ts';
 import { KuzuKnowledgeGraph } from '../graph/kuzu-knowledge-graph.ts';
-import { isKuzuDBEnabled, isKuzuDBPersistenceEnabled } from '../../config/feature-flags.ts';
+import { isKuzuDBEnabled, isKuzuDBPersistenceEnabled } from '../../config/features.ts';
 
 export interface KuzuProcessorOptions {
   enableKuzuDB?: boolean;

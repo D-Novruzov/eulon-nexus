@@ -5,7 +5,7 @@ import type { LLMService, LLMConfig } from './llm-service.ts';
 import type { KuzuQueryEngine } from '../core/graph/kuzu-query-engine.ts';
 import type { KnowledgeGraph } from '../core/graph/types.ts';
 
-import { isKuzuDBEnabled } from '../config/feature-flags.js';
+import { isKuzuDBEnabled } from '../config/features.ts';
 
 export interface KuzuRAGContext {
   graph: KnowledgeGraph;

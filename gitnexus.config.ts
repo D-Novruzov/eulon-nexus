@@ -138,6 +138,29 @@ export interface GitNexusConfig {
   };
 
   // ========================================
+  // FEATURE FLAGS
+  // ========================================
+  features: {
+    // AI Features
+    enableAdvancedRAG: boolean;
+    enableReActReasoning: boolean;
+    enableMultiLLM: boolean;
+    
+    // Performance Features
+    enableWebWorkers: boolean;
+    enableBatchProcessing: boolean;
+    enableCaching: boolean;
+    enableWorkerPool: boolean;
+    enableParallelParsing: boolean;
+    enableParallelProcessing: boolean;
+    
+    // Debug Features
+    enableDebugMode: boolean;
+    enablePerformanceLogging: boolean;
+    enableQueryLogging: boolean;
+  };
+
+  // ========================================
   // ENVIRONMENT & DEPLOYMENT
   // ========================================
   environment: 'development' | 'staging' | 'production';
@@ -302,6 +325,29 @@ const config: GitNexusConfig = {
       maxRetries: 3,
       backoffMs: 1000
     }
+  },
+
+  // ========================================
+  // FEATURE FLAGS
+  // ========================================
+  features: {
+    // AI Features
+    enableAdvancedRAG: true,
+    enableReActReasoning: true,
+    enableMultiLLM: true,
+    
+    // Performance Features
+    enableWebWorkers: true,
+    enableBatchProcessing: true,
+    enableCaching: true,
+    enableWorkerPool: true,
+    enableParallelParsing: true,
+    enableParallelProcessing: true,
+    
+    // Debug Features
+    enableDebugMode: false, // Can be enabled for development
+    enablePerformanceLogging: true,
+    enableQueryLogging: false
   },
 
   // ========================================

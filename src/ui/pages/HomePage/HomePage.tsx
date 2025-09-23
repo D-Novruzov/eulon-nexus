@@ -7,7 +7,7 @@ import ExportFormatModal from '../../components/ExportFormatModal';
 import RepositoryInput from '../../components/repository/RepositoryInput';
 import { useGitNexus } from '../../hooks/useGitNexus';
 import { exportAndDownloadGraph, exportAndDownloadGraphAsCSV } from '../../../lib/export';
-import { getFeatureFlags } from '../../../config/feature-flags';
+import { getFeatureFlags } from '../../../config/features.ts';
 import type { ExportFormat } from '../../components/ExportFormatModal';
 
 /**

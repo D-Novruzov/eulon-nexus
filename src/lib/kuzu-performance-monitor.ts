@@ -1,4 +1,4 @@
-import { isPerformanceMonitoringEnabled } from '../config/feature-flags.js';
+import { isPerformanceMonitoringEnabled } from '../config/features.ts';
 
 export interface PerformanceMetric {
   operation: string;

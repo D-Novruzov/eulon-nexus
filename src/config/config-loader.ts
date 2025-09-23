@@ -120,6 +120,26 @@ const GitHubConfigSchema = z.object({
   })
 });
 
+const FeaturesConfigSchema = z.object({
+  // AI Features
+  enableAdvancedRAG: z.boolean(),
+  enableReActReasoning: z.boolean(),
+  enableMultiLLM: z.boolean(),
+  
+  // Performance Features
+  enableWebWorkers: z.boolean(),
+  enableBatchProcessing: z.boolean(),
+  enableCaching: z.boolean(),
+  enableWorkerPool: z.boolean(),
+  enableParallelParsing: z.boolean(),
+  enableParallelProcessing: z.boolean(),
+  
+  // Debug Features
+  enableDebugMode: z.boolean(),
+  enablePerformanceLogging: z.boolean(),
+  enableQueryLogging: z.boolean()
+});
+
 const GitNexusConfigSchema = z.object({
   processing: ProcessingConfigSchema,
   kuzu: KuzuConfigSchema,
@@ -127,6 +147,7 @@ const GitNexusConfigSchema = z.object({
   ignore: IgnoreConfigSchema,
   logging: LoggingConfigSchema,
   github: GitHubConfigSchema,
+  features: FeaturesConfigSchema,
   environment: z.enum(['development', 'staging', 'production'])
 });
 
@@ -259,6 +280,7 @@ export class ConfigLoader {
         monitoringIntervalMs: 30000
       },
       github: {
+        token: '',
         apiUrl: 'https://api.github.com',
         rateLimit: {
           maxRequests: 60,
@@ -268,6 +290,25 @@ export class ConfigLoader {
           maxRetries: 3,
           backoffMs: 1000
         }
+      },
+      features: {
+        // AI Features
+        enableAdvancedRAG: true,
+        enableReActReasoning: true,
+        enableMultiLLM: true,
+        
+        // Performance Features
+        enableWebWorkers: true,
+        enableBatchProcessing: true,
+        enableCaching: true,
+        enableWorkerPool: true,
+        enableParallelParsing: true,
+        enableParallelProcessing: true,
+        
+        // Debug Features
+        enableDebugMode: false,
+        enablePerformanceLogging: true,
+        enableQueryLogging: false
       },
       environment: 'development'
     };

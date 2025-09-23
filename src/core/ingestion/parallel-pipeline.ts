@@ -5,7 +5,7 @@ import { ParallelParsingProcessor } from './parallel-parsing-processor.ts';
 import { ImportProcessor } from './import-processor.ts';
 import { CallProcessor } from './call-processor.ts';
 import { WebWorkerPoolUtils } from '../../lib/web-worker-pool.js';
-import { isKuzuDBEnabled } from '../../config/feature-flags.ts';
+import { isKuzuDBEnabled } from '../../config/features.ts';
 
 export interface PipelineInput {
   projectRoot: string;
