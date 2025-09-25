@@ -699,20 +699,22 @@ This node represents a ${nodeType.toLowerCase()} in the knowledge graph.
 
   return (
     <>
-      {/* Backdrop */}
-      <div
-        style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: colors.backdrop,
-          zIndex: 1000,
-          animation: 'fadeIn 0.2s ease-out'
-        }}
-        onClick={handleBackdropClick}
-      />
+      {/* Backdrop (hidden when pinned to avoid blocking UI interactions) */}
+      {!isPinned && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: colors.backdrop,
+            zIndex: 1000,
+            animation: 'fadeIn 0.2s ease-out'
+          }}
+          onClick={handleBackdropClick}
+        />
+      )}
       
       {/* Floating Window */}
       <div

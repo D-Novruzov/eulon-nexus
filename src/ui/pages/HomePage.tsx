@@ -276,7 +276,7 @@ const HomePage: React.FC = () => {
       gap: '16px',
       fontSize: '14px',
       fontWeight: '500',
-      color: 'white'
+      color: colors.text
     },
 
     navbarButton: {
@@ -794,7 +794,19 @@ const HomePage: React.FC = () => {
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 2000
-          }}>
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              updateState({ showSettings: false });
+            }
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              updateState({ showSettings: false });
+            }
+          }}
+          tabIndex={-1}
+          >
             <div style={{
               backgroundColor: colors.surface,
               borderRadius: '16px',

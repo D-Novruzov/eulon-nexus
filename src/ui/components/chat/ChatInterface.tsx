@@ -913,8 +913,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               {llmSettings.provider === 'azure-openai' ? (
                 <input
                   type="text"
-                  value={llmSettings.model}
-                  onChange={(e) => setLLMSettings(prev => ({ ...prev, model: e.target.value }))}
+                  value={llmSettings.azureOpenAIDeploymentName || ''}
+                  onChange={(e) => setLLMSettings(prev => ({ ...prev, azureOpenAIDeploymentName: e.target.value }))}
                   placeholder="gpt-4.1-mini-v2"
                   style={{ width: '100%', padding: '6px', fontSize: '14px' }}
                 />
@@ -1015,8 +1015,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   localStorage.setItem('azure_openai_endpoint', llmSettings.azureOpenAIEndpoint);
                 }
                 // For Azure OpenAI, the model field contains the deployment name
-                if (llmSettings.provider === 'azure-openai' && llmSettings.model) {
-                  localStorage.setItem('azure_openai_deployment', llmSettings.model);
+                if (llmSettings.provider === 'azure-openai' && llmSettings.azureOpenAIDeploymentName) {
+                  localStorage.setItem('azure_openai_deployment', llmSettings.azureOpenAIDeploymentName);
                 }
                 if (llmSettings.azureOpenAIApiVersion) {
                   localStorage.setItem('azure_openai_api_version', llmSettings.azureOpenAIApiVersion);
