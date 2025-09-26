@@ -154,7 +154,7 @@ export class LLMService {
   }
 
   /**
-   * Get available models for a provider
+   * Get available models for a provider (static fallback)
    */
   public getAvailableModels(provider: LLMProvider): string[] {
     switch (provider) {
@@ -197,6 +197,91 @@ export class LLMService {
         ];
       default:
         return [];
+    }
+  }
+
+  /**
+   * Fetch available models from OpenAI API using user's API key
+   */
+  public async fetchAvailableModels(provider: LLMProvider, apiKey: string): Promise<string[]> {
+    if (!apiKey || !this.validateApiKey(provider, apiKey)) {
+      console.warn('Invalid API key, using fallback models');
+      return this.getAvailableModels(provider);
+    }
+
+    try {
+      switch (provider) {
+        case 'openai':
+          return await this.fetchOpenAIModels(apiKey);
+        case 'azure-openai':
+          // Azure OpenAI models are deployment-specific, use static list
+          return this.getAvailableModels(provider);
+        case 'anthropic':
+          // Anthropic doesn't have a public models API, use static list
+          return this.getAvailableModels(provider);
+        case 'gemini':
+          // Google Gemini models are predefined, use static list
+          return this.getAvailableModels(provider);
+        default:
+          return this.getAvailableModels(provider);
+      }
+    } catch (error) {
+      console.warn('Failed to fetch models from API, using fallback:', error);
+      return this.getAvailableModels(provider);
+    }
+  }
+
+  /**
+   * Fetch models from OpenAI API
+   */
+  private async fetchOpenAIModels(apiKey: string): Promise<string[]> {
+    try {
+      const response = await fetch('https://api.openai.com/v1/models', {
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`OpenAI API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      // Filter for chat models only and sort by relevance
+      const chatModels = data.data
+        .filter((model: any) => {
+          const id = model.id.toLowerCase();
+          return (
+            id.includes('gpt') && 
+            !id.includes('instruct') && 
+            !id.includes('edit') &&
+            !id.includes('embedding') &&
+            !id.includes('whisper') &&
+            !id.includes('tts') &&
+            !id.includes('dall-e')
+          );
+        })
+        .map((model: any) => model.id)
+        .sort((a: string, b: string) => {
+          // Sort GPT models by preference: 4o > 4-turbo > 4 > 3.5-turbo
+          const getModelPriority = (modelId: string) => {
+            if (modelId.includes('4o')) return 1;
+            if (modelId.includes('4-turbo')) return 2;
+            if (modelId.includes('gpt-4')) return 3;
+            if (modelId.includes('3.5-turbo')) return 4;
+            return 5;
+          };
+          return getModelPriority(a) - getModelPriority(b);
+        });
+
+      console.log('📡 Fetched OpenAI models:', chatModels);
+      return chatModels.length > 0 ? chatModels : this.getAvailableModels('openai');
+      
+    } catch (error) {
+      console.error('Failed to fetch OpenAI models:', error);
+      throw error;
     }
   }
 
@@ -271,23 +356,105 @@ export class LLMService {
           apiKey: config.apiKey,
           model,
           temperature: mergedConfig.temperature,
-          maxTokens: mergedConfig.maxTokens,
           maxRetries: mergedConfig.maxRetries,
           timeout: 30000
+          // Removed maxTokens - let OpenAI handle token limits automatically
         });
 
       case 'azure-openai':
-        return new AzureChatOpenAI({
-          azureOpenAIApiKey: config.apiKey,
-          model: config.azureOpenAIDeploymentName, // Use deployment name as model
-          temperature: mergedConfig.temperature,
-          maxTokens: mergedConfig.maxTokens,
-          maxRetries: mergedConfig.maxRetries,
-          timeout: 30000,
-          azureOpenAIApiInstanceName: config.azureOpenAIEndpoint?.replace('https://', '').split('.')[0],
-          azureOpenAIApiVersion: config.azureOpenAIApiVersion,
-          azureOpenAIApiDeploymentName: config.azureOpenAIDeploymentName
+        // Debug logging for Azure config
+        console.log('🔧 Azure OpenAI Config Debug:', {
+          apiKey: config.apiKey ? `${config.apiKey.substring(0, 6)}...` : 'missing',
+          endpoint: config.azureOpenAIEndpoint,
+          deploymentName: config.azureOpenAIDeploymentName,
+          apiVersion: config.azureOpenAIApiVersion,
+          instanceName: config.azureOpenAIEndpoint?.replace('https://', '').split('.')[0]
         });
+
+        // Extract instance name from endpoint (remove https:// and .openai.azure.com)
+        const instanceName = config.azureOpenAIEndpoint?.replace('https://', '').replace('.openai.azure.com', '') || '';
+        
+        // Set environment variables as fallback (LangChain sometimes checks these)
+        if (typeof process !== 'undefined' && process.env) {
+          process.env.AZURE_OPENAI_API_KEY = config.apiKey;
+          process.env.AZURE_OPENAI_ENDPOINT = config.azureOpenAIEndpoint;
+          process.env.AZURE_OPENAI_API_VERSION = config.azureOpenAIApiVersion;
+        }
+        
+        // Try multiple configuration approaches
+        const configs = [
+          // Configuration 1: Standard Azure parameters
+          {
+            apiKey: config.apiKey,
+            azureOpenAIApiKey: config.apiKey,
+            azureOpenAIEndpoint: config.azureOpenAIEndpoint,
+            azureOpenAIApiInstanceName: instanceName,
+            azureOpenAIApiDeploymentName: config.azureOpenAIDeploymentName,
+            azureOpenAIApiVersion: config.azureOpenAIApiVersion || '2024-02-01',
+            temperature: mergedConfig.temperature,
+            maxRetries: mergedConfig.maxRetries
+            // Removed maxTokens - let Azure OpenAI handle token limits automatically
+          },
+          // Configuration 2: Alternative parameter names
+          {
+            openAIApiKey: config.apiKey,
+            azureOpenAIApiKey: config.apiKey,
+            azureOpenAIEndpoint: config.azureOpenAIEndpoint,
+            azureOpenAIApiDeploymentName: config.azureOpenAIDeploymentName,
+            azureOpenAIApiVersion: config.azureOpenAIApiVersion || '2024-02-01',
+            deploymentName: config.azureOpenAIDeploymentName,
+            temperature: mergedConfig.temperature
+            // Removed maxTokens - let Azure OpenAI handle token limits automatically
+          },
+          // Configuration 3: Minimal required parameters
+          {
+            apiKey: config.apiKey,
+            azureOpenAIApiKey: config.apiKey,
+            azureOpenAIEndpoint: config.azureOpenAIEndpoint,
+            deploymentName: config.azureOpenAIDeploymentName,
+            apiVersion: config.azureOpenAIApiVersion || '2024-02-01'
+          }
+        ];
+
+        let lastError: Error | null = null;
+        
+        for (let i = 0; i < configs.length; i++) {
+          try {
+            console.log(`🔄 Trying Azure config approach ${i + 1}:`, {
+              hasApiKey: !!configs[i].apiKey || !!configs[i].azureOpenAIApiKey || !!configs[i].openAIApiKey,
+              endpoint: configs[i].azureOpenAIEndpoint,
+              deployment: configs[i].azureOpenAIApiDeploymentName || configs[i].deploymentName
+            });
+            
+            const azureModel = new AzureChatOpenAI(configs[i]);
+            console.log('✅ Azure OpenAI model created successfully!');
+            return azureModel;
+          } catch (error) {
+            console.warn(`❌ Config approach ${i + 1} failed:`, error);
+            lastError = error as Error;
+            continue;
+          }
+        }
+        
+        // If all configurations failed, try regular OpenAI as absolute fallback
+        console.warn('❌ All Azure OpenAI configurations failed. Trying regular OpenAI as fallback...');
+        console.log('🔄 Attempting OpenAI fallback with Azure endpoint...');
+        
+        try {
+          // Last resort: use regular ChatOpenAI with Azure endpoint in custom way
+          return new ChatOpenAI({
+            openAIApiKey: config.apiKey,
+            apiKey: config.apiKey,
+            model: config.azureOpenAIDeploymentName,
+            temperature: mergedConfig.temperature,
+            maxRetries: mergedConfig.maxRetries,
+            timeout: 30000
+            // Removed maxTokens - let OpenAI handle token limits automatically
+          });
+        } catch (fallbackError) {
+          console.error('❌ OpenAI fallback also failed:', fallbackError);
+          throw lastError || new Error('Failed to create any OpenAI model for Azure configuration');
+        }
 
       case 'anthropic':
         return new ChatAnthropic({

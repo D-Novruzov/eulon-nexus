@@ -10,6 +10,7 @@ import { ReActAgent, type ReActResult, type ReActOptions } from '../../../ai/rea
 import { sessionManager, type SessionInfo } from '../../../lib/session-manager.ts';
 import { ChatSessionManager, LocalStorageChatHistory, type ChatHistoryMetadata } from '../../../lib/chat-history.ts';
 import { AIMessage } from '@langchain/core/messages';
+import { useSettings } from '../../hooks/useSettings.ts';
 // Query cache functionality removed - using direct graph queries
 
 interface ChatMessage {
@@ -63,17 +64,7 @@ interface ChatInterfaceProps {
   style?: React.CSSProperties;
 }
 
-interface LLMSettings {
-  provider: LLMProvider;
-  apiKey: string;
-  model: string;
-  temperature: number;
-  maxTokens: number;
-  // Azure OpenAI specific fields
-  azureOpenAIEndpoint?: string;
-  azureOpenAIDeploymentName?: string;
-  azureOpenAIApiVersion?: string;
-}
+// LLMSettings interface removed - using useSettings hook
 
 const ChatInterface: React.FC<ChatInterfaceProps> = ({
   graph,
@@ -92,17 +83,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [chatHistory, setChatHistory] = useState<LocalStorageChatHistory | null>(null);
   // Query cache removed - using direct graph queries
   
-  // LLM Configuration
-  const [llmSettings, setLLMSettings] = useState<LLMSettings>({
-    provider: 'openai',
-    apiKey: '',
-    model: 'gpt-4o-mini',
-    temperature: 0.1,
-    maxTokens: 4000,
-    azureOpenAIEndpoint: '',
-    azureOpenAIDeploymentName: '',
-    azureOpenAIApiVersion: '2024-02-01'
-  });
+  // Use settings hook for LLM configuration
+  const { settings, updateSetting, getCurrentProviderApiKey, updateCurrentProviderApiKey } = useSettings();
+  
+  // Dynamic model fetching
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<string>('');
 
   // Services
   const [llmService] = useState(new LLMService());
@@ -127,10 +114,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         
         // Only set context if we have valid graph data
         if (graph && graph.nodes && graph.nodes.length > 0) {
-          // Get or create session
-          let sessionId = ChatSessionManager.getCurrentSession();
+          // First, load the sessions list to check current state
+          refreshSessions();
+          
+          // Get or create session - use sessionManager for consistency
+          let sessionId = sessionManager.getCurrentSession();
           if (!sessionId) {
-            sessionId = ChatSessionManager.createSession(projectName);
+            sessionId = sessionManager.createSession({ 
+              projectName,
+              switchToSession: true
+            });
           }
           
           // Initialize chat history
@@ -140,14 +133,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           
           // Set context with graph data
           const llmConfig: LLMConfig = {
-            provider: llmSettings.provider,
-            model: llmSettings.model,
-            temperature: llmSettings.temperature,
-            maxTokens: llmSettings.maxTokens,
-            apiKey: llmSettings.apiKey,
-            azureOpenAIEndpoint: llmSettings.azureOpenAIEndpoint,
-            azureOpenAIDeploymentName: llmSettings.azureOpenAIDeploymentName,
-            azureOpenAIApiVersion: llmSettings.azureOpenAIApiVersion
+            provider: settings.llmProvider,
+            model: settings.llmProvider === 'azure-openai' 
+              ? settings.azureOpenAIDeploymentName || 'gpt-4o-mini' 
+              : selectedModel || 'gpt-4o-mini',
+            temperature: 0.1,
+            // Removed maxTokens - let OpenAI handle token limits automatically
+            apiKey: getCurrentProviderApiKey(),
+            azureOpenAIEndpoint: settings.azureOpenAIEndpoint,
+            azureOpenAIDeploymentName: settings.azureOpenAIDeploymentName,
+            azureOpenAIApiVersion: settings.azureOpenAIApiVersion
           };
           
           await ragOrchestrator.setContext({ 
@@ -163,7 +158,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           // Load conversation history from chat history
           await loadConversationHistory(history);
           
-          // Load sessions list
+          // Refresh sessions again after initialization
           refreshSessions();
         } else {
           console.log('No valid graph data available yet, skipping context initialization');
@@ -194,29 +189,45 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   };
 
-  // Load settings from localStorage on mount
-  useEffect(() => {
-    const savedProvider = localStorage.getItem('llm_provider') as LLMProvider;
-    const savedApiKey = localStorage.getItem('llm_api_key');
-    const savedAzureEndpoint = localStorage.getItem('azure_openai_endpoint');
-    const savedAzureDeployment = localStorage.getItem('azure_openai_deployment');
-    const savedAzureApiVersion = localStorage.getItem('azure_openai_api_version');
+  // Settings are managed by useSettings hook
 
-    if (savedProvider || savedApiKey || savedAzureEndpoint) {
-      setLLMSettings(prev => ({
-        ...prev,
-        provider: savedProvider || prev.provider,
-        apiKey: savedApiKey || prev.apiKey,
-        azureOpenAIEndpoint: savedAzureEndpoint || prev.azureOpenAIEndpoint,
-        azureOpenAIDeploymentName: savedAzureDeployment || prev.azureOpenAIDeploymentName,
-        azureOpenAIApiVersion: savedAzureApiVersion || prev.azureOpenAIApiVersion,
-        // For Azure OpenAI, use deployment name as model, otherwise use default model
-        model: savedProvider === 'azure-openai' 
-          ? (savedAzureDeployment || 'gpt-4.1-mini-v2')
-          : (savedProvider ? llmService.getAvailableModels(savedProvider)[0] : prev.model)
-      }));
-    }
-  }, [llmService]);
+  // Fetch available models when provider or API key changes
+  useEffect(() => {
+    const fetchModels = async () => {
+      const apiKey = getCurrentProviderApiKey();
+      
+      if (!apiKey || !settings.llmProvider) {
+        // Use static fallback models
+        const staticModels = llmService.getAvailableModels(settings.llmProvider);
+        setAvailableModels(staticModels);
+        setSelectedModel(staticModels[0] || '');
+        return;
+      }
+
+      setIsLoadingModels(true);
+      try {
+        console.log('🔄 Fetching models for provider:', settings.llmProvider);
+        const models = await llmService.fetchAvailableModels(settings.llmProvider, apiKey);
+        setAvailableModels(models);
+        
+        // Set default model if none selected
+        if (!selectedModel || !models.includes(selectedModel)) {
+          setSelectedModel(models[0] || '');
+        }
+        
+        console.log('✅ Models fetched successfully:', models);
+      } catch (error) {
+        console.warn('❌ Failed to fetch models, using fallback:', error);
+        const staticModels = llmService.getAvailableModels(settings.llmProvider);
+        setAvailableModels(staticModels);
+        setSelectedModel(staticModels[0] || '');
+      } finally {
+        setIsLoadingModels(false);
+      }
+    };
+
+    fetchModels();
+  }, [settings.llmProvider, getCurrentProviderApiKey()]); // Removed selectedModel and llmService to prevent loops
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -229,26 +240,49 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     if (!inputValue.trim() || isLoading || !chatHistory) return;
 
     // Validate API key
-    if (!llmSettings.apiKey.trim()) {
+    const currentApiKey = getCurrentProviderApiKey();
+    
+    // Debug logging
+    console.log('🔍 Debug API Key Check:', {
+      provider: settings.llmProvider,
+      hasApiKey: !!currentApiKey,
+      apiKeyLength: currentApiKey?.length || 0,
+      apiKeyPrefix: currentApiKey?.substring(0, 6) || 'none',
+      allSettings: {
+        openaiApiKey: !!settings.openaiApiKey ? `${settings.openaiApiKey.substring(0, 6)}...` : 'empty',
+        azureApiKey: !!settings.azureApiKey ? `${settings.azureApiKey.substring(0, 6)}...` : 'empty',
+        anthropicApiKey: !!settings.anthropicApiKey ? `${settings.anthropicApiKey.substring(0, 6)}...` : 'empty',
+        geminiApiKey: !!settings.geminiApiKey ? `${settings.geminiApiKey.substring(0, 6)}...` : 'empty'
+      },
+      localStorage: {
+        openai_api_key: localStorage.getItem('openai_api_key') ? `${localStorage.getItem('openai_api_key')?.substring(0, 6)}...` : 'null',
+        azure_api_key: localStorage.getItem('azure_api_key') ? `${localStorage.getItem('azure_api_key')?.substring(0, 6)}...` : 'null',
+        anthropic_api_key: localStorage.getItem('anthropic_api_key') ? `${localStorage.getItem('anthropic_api_key')?.substring(0, 6)}...` : 'null',
+        gemini_api_key: localStorage.getItem('gemini_api_key') ? `${localStorage.getItem('gemini_api_key')?.substring(0, 6)}...` : 'null',
+        llm_provider: localStorage.getItem('llm_provider')
+      }
+    });
+    
+    if (!currentApiKey.trim()) {
       alert('Please configure your API key in settings');
       setShowSettings(true);
       return;
     }
 
-    if (!llmService.validateApiKey(llmSettings.provider, llmSettings.apiKey)) {
+    if (!llmService.validateApiKey(settings.llmProvider, currentApiKey)) {
       alert('Invalid API key format. Please check your settings.');
       setShowSettings(true);
       return;
     }
 
     // Additional validation for Azure OpenAI
-    if (llmSettings.provider === 'azure-openai') {
-      if (!llmSettings.azureOpenAIEndpoint?.trim()) {
+    if (settings.llmProvider === 'azure-openai') {
+      if (!settings.azureOpenAIEndpoint?.trim()) {
         alert('Please configure your Azure OpenAI endpoint in settings');
         setShowSettings(true);
         return;
       }
-      if (!llmSettings.azureOpenAIDeploymentName?.trim()) {
+      if (!settings.azureOpenAIDeploymentName?.trim()) {
         alert('Please configure your Azure OpenAI deployment name in settings');
         setShowSettings(true);
         return;
@@ -280,21 +314,37 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       const startTime = Date.now();
       
       const llmConfig: LLMConfig = {
-        provider: llmSettings.provider,
-        apiKey: llmSettings.apiKey,
-        model: llmSettings.model,
-        temperature: llmSettings.temperature,
-        maxTokens: llmSettings.maxTokens,
+        provider: settings.llmProvider,
+        apiKey: currentApiKey,
+        model: settings.llmProvider === 'azure-openai' 
+          ? settings.azureOpenAIDeploymentName || 'gpt-4o-mini' 
+          : selectedModel || 'gpt-4o-mini',
+        temperature: 0.1,
+        // Removed maxTokens - let OpenAI handle token limits automatically
         // Azure OpenAI specific fields
-        azureOpenAIEndpoint: llmSettings.azureOpenAIEndpoint,
-        azureOpenAIDeploymentName: llmSettings.azureOpenAIDeploymentName,
-        azureOpenAIApiVersion: llmSettings.azureOpenAIApiVersion
+        azureOpenAIEndpoint: settings.azureOpenAIEndpoint,
+        azureOpenAIDeploymentName: settings.azureOpenAIDeploymentName,
+        azureOpenAIApiVersion: settings.azureOpenAIApiVersion
       };
+
+      // Debug logging for LLM config
+      console.log('🚀 LLM Config being sent:', {
+        provider: llmConfig.provider,
+        hasApiKey: !!llmConfig.apiKey,
+        apiKeyLength: llmConfig.apiKey?.length || 0,
+        apiKeyPrefix: llmConfig.apiKey?.substring(0, 6) || 'none',
+        model: llmConfig.model,
+        selectedModel: selectedModel,
+        availableModels: availableModels,
+        azureEndpoint: llmConfig.azureOpenAIEndpoint,
+        azureDeployment: llmConfig.azureOpenAIDeploymentName,
+        azureApiVersion: llmConfig.azureOpenAIApiVersion
+      });
 
       const ragOptions: ReActOptions = {
         maxIterations: 5,
         includeReasoning: true, // Always include reasoning for better UX
-        temperature: llmSettings.temperature,
+        temperature: 0.1,
         enableQueryCaching: true,
         similarityThreshold: 0.8
       };
@@ -398,65 +448,113 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   };
 
   const createNewSession = () => {
-    const sessionId = sessionManager.createSession({ 
-      name: `Chat ${new Date().toLocaleString()}`,
-      projectName,
-      switchToSession: true
-    });
-    setCurrentSessionId(sessionId);
-    setMessages([]);
-    refreshSessions();
-  };
-
-  const switchSession = async (sessionId: string) => {
-    if (sessionManager.switchToSession(sessionId)) {
+    try {
+      const sessionId = sessionManager.createSession({ 
+        name: `Chat ${new Date().toLocaleString()}`,
+        projectName,
+        switchToSession: true
+      });
       setCurrentSessionId(sessionId);
+      setMessages([]);
       
       // Initialize new chat history
       const history = new LocalStorageChatHistory(sessionId);
       setChatHistory(history);
       
-      // Load conversation history for the new session
-      const llmConfig: LLMConfig = {
-        provider: llmSettings.provider,
-        model: llmSettings.model,
-        temperature: llmSettings.temperature,
-        maxTokens: llmSettings.maxTokens,
-        apiKey: llmSettings.apiKey,
-        azureOpenAIEndpoint: llmSettings.azureOpenAIEndpoint,
-        azureOpenAIDeploymentName: llmSettings.azureOpenAIDeploymentName,
-        azureOpenAIApiVersion: llmSettings.azureOpenAIApiVersion
-      };
-      
-      await ragOrchestrator.setContext({ 
-        graph, 
-        fileContents, 
-        projectName,
-        sessionId 
-      }, llmConfig);
-      
-      // Set chat history for conversation context
-      ragOrchestrator.setChatHistory(history);
-      
-      // Load conversation history from chat history
-      await loadConversationHistory(history);
+      refreshSessions();
+    } catch (error) {
+      console.error('Error creating new session:', error);
+      // Refresh sessions to ensure UI state is consistent
       refreshSessions();
     }
   };
 
-  const deleteSession = (sessionId: string) => {
+  const switchSession = async (sessionId: string) => {
+    try {
+      if (sessionManager.switchToSession(sessionId)) {
+        setCurrentSessionId(sessionId);
+        
+        // Initialize new chat history
+        const history = new LocalStorageChatHistory(sessionId);
+        setChatHistory(history);
+        
+        // Load conversation history for the new session
+        const llmConfig: LLMConfig = {
+          provider: settings.llmProvider,
+          model: settings.llmProvider === 'azure-openai' 
+            ? settings.azureOpenAIDeploymentName || 'gpt-4o-mini' 
+            : selectedModel || 'gpt-4o-mini',
+          temperature: 0.1,
+          // Removed maxTokens - let OpenAI handle token limits automatically
+          apiKey: getCurrentProviderApiKey(),
+          azureOpenAIEndpoint: settings.azureOpenAIEndpoint,
+          azureOpenAIDeploymentName: settings.azureOpenAIDeploymentName,
+          azureOpenAIApiVersion: settings.azureOpenAIApiVersion
+        };
+        
+        await ragOrchestrator.setContext({ 
+          graph, 
+          fileContents, 
+          projectName,
+          sessionId 
+        }, llmConfig);
+        
+        // Set chat history for conversation context
+        ragOrchestrator.setChatHistory(history);
+        
+        // Load conversation history from chat history
+        await loadConversationHistory(history);
+        refreshSessions();
+      } else {
+        console.warn('Failed to switch to session:', sessionId);
+      }
+    } catch (error) {
+      console.error('Error switching session:', error);
+      // Refresh sessions to ensure UI state is consistent
+      refreshSessions();
+    }
+  };
+
+  const deleteSession = async (sessionId: string) => {
     if (confirm('Are you sure you want to delete this conversation?')) {
-      if (sessionManager.deleteSession(sessionId)) {
-        if (currentSessionId === sessionId) {
-          createNewSession();
+      try {
+        const wasCurrentSession = currentSessionId === sessionId;
+        
+        if (sessionManager.deleteSession(sessionId)) {
+          // If we deleted the current session, check what to do next
+          if (wasCurrentSession) {
+            const newCurrentSession = ChatSessionManager.getCurrentSession();
+            
+            if (newCurrentSession) {
+              // Switch to the new current session
+              await switchSession(newCurrentSession);
+            } else {
+              // No sessions remaining, create a new one
+              createNewSession();
+            }
+          }
+          refreshSessions();
+        } else {
+          console.warn('Failed to delete session, it might be the only session remaining');
         }
+      } catch (error) {
+        console.error('Error deleting session:', error);
+        // Refresh sessions to ensure UI state is consistent
         refreshSessions();
       }
     }
   };
 
   const renameSession = (sessionId: string, newName: string) => {
-    if (sessionManager.renameSession(sessionId, newName)) {
+    try {
+      if (sessionManager.renameSession(sessionId, newName)) {
+        refreshSessions();
+      } else {
+        console.warn('Failed to rename session');
+      }
+    } catch (error) {
+      console.error('Error renaming session:', error);
+      // Refresh sessions to ensure UI state is consistent
       refreshSessions();
     }
   };
@@ -743,9 +841,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     );
   };
 
-  // Get available models for current provider
+  // Get available models for current provider (now using dynamic models)
   const getAvailableModels = () => {
-    return llmService.getAvailableModels(llmSettings.provider);
+    return availableModels.length > 0 ? availableModels : llmService.getAvailableModels(settings.llmProvider);
   };
 
   const containerStyle: React.CSSProperties = {
@@ -827,7 +925,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             padding: '2px 8px',
             borderRadius: '12px'
           }}>
-            {llmService.getProviderDisplayName(llmSettings.provider)}
+            {llmService.getProviderDisplayName(settings.llmProvider)}
           </span>
         </div>
         
@@ -891,12 +989,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             <div>
               <label style={{ fontSize: '12px', color: '#666' }}>Provider</label>
               <select
-                value={llmSettings.provider}
-                onChange={(e) => setLLMSettings(prev => ({
-                  ...prev,
-                  provider: e.target.value as LLMProvider,
-                  model: llmService.getAvailableModels(e.target.value as LLMProvider)[0]
-                }))}
+                value={settings.llmProvider}
+                onChange={(e) => updateSetting('llmProvider', e.target.value as LLMProvider)}
                 style={{ width: '100%', padding: '6px', fontSize: '14px' }}
               >
                 <option value="openai">OpenAI</option>
@@ -907,26 +1001,75 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             </div>
             
             <div>
-              <label style={{ fontSize: '12px', color: '#666' }}>
-                {llmSettings.provider === 'azure-openai' ? 'Deployment Name' : 'Model'}
-              </label>
-              {llmSettings.provider === 'azure-openai' ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <label style={{ fontSize: '12px', color: '#666' }}>
+                  {settings.llmProvider === 'azure-openai' ? 'Deployment Name' : 'Model'}
+                  {isLoadingModels && ' (Loading...)'}
+                </label>
+                {settings.llmProvider === 'openai' && (
+                  <button
+                    onClick={async () => {
+                      const apiKey = getCurrentProviderApiKey();
+                      if (apiKey) {
+                        setIsLoadingModels(true);
+                        try {
+                          const models = await llmService.fetchAvailableModels(settings.llmProvider, apiKey);
+                          setAvailableModels(models);
+                          console.log('🔄 Models refreshed:', models);
+                        } catch (error) {
+                          console.warn('Failed to refresh models:', error);
+                        } finally {
+                          setIsLoadingModels(false);
+                        }
+                      }
+                    }}
+                    disabled={isLoadingModels || !getCurrentProviderApiKey()}
+                    style={{
+                      fontSize: '10px',
+                      padding: '2px 6px',
+                      backgroundColor: '#f8f9fa',
+                      border: '1px solid #ddd',
+                      borderRadius: '4px',
+                      cursor: isLoadingModels ? 'wait' : 'pointer',
+                      opacity: isLoadingModels || !getCurrentProviderApiKey() ? 0.5 : 1
+                    }}
+                    title="Refresh available models from OpenAI"
+                  >
+                    🔄
+                  </button>
+                )}
+              </div>
+              {settings.llmProvider === 'azure-openai' ? (
                 <input
                   type="text"
-                  value={llmSettings.azureOpenAIDeploymentName || ''}
-                  onChange={(e) => setLLMSettings(prev => ({ ...prev, azureOpenAIDeploymentName: e.target.value }))}
+                  value={settings.azureOpenAIDeploymentName || ''}
+                  onChange={(e) => updateSetting('azureOpenAIDeploymentName', e.target.value)}
                   placeholder="gpt-4.1-mini-v2"
                   style={{ width: '100%', padding: '6px', fontSize: '14px' }}
                 />
               ) : (
                 <select
-                  value={llmSettings.model}
-                  onChange={(e) => setLLMSettings(prev => ({ ...prev, model: e.target.value }))}
-                  style={{ width: '100%', padding: '6px', fontSize: '14px' }}
+                  value={selectedModel}
+                  onChange={(e) => setSelectedModel(e.target.value)}
+                  style={{ 
+                    width: '100%', 
+                    padding: '6px', 
+                    fontSize: '14px',
+                    opacity: isLoadingModels ? 0.6 : 1,
+                    cursor: isLoadingModels ? 'wait' : 'pointer'
+                  }}
+                  disabled={isLoadingModels}
                 >
-                  {getAvailableModels().map(model => (
-                    <option key={model} value={model}>{model}</option>
-                  ))}
+                  {isLoadingModels ? (
+                    <option value="">Loading models...</option>
+                  ) : (
+                    getAvailableModels().map(model => (
+                      <option key={model} value={model}>
+                        {model}
+                        {model === selectedModel ? ' (selected)' : ''}
+                      </option>
+                    ))
+                  )}
                 </select>
               )}
             </div>
@@ -936,26 +1079,26 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             <label style={{ fontSize: '12px', color: '#666' }}>API Key</label>
             <input
               type="password"
-              value={llmSettings.apiKey}
-              onChange={(e) => setLLMSettings(prev => ({ ...prev, apiKey: e.target.value }))}
+              value={getCurrentProviderApiKey()}
+              onChange={(e) => updateCurrentProviderApiKey(e.target.value)}
               placeholder={
-                llmSettings.provider === 'azure-openai' ? 'Your Azure OpenAI key...' :
-                llmSettings.provider === 'anthropic' ? 'sk-ant-...' :
-                llmSettings.provider === 'gemini' ? 'Your Google API key...' : 'sk-...'
+                settings.llmProvider === 'azure-openai' ? 'Your Azure OpenAI key...' :
+                settings.llmProvider === 'anthropic' ? 'sk-ant-...' :
+                settings.llmProvider === 'gemini' ? 'Your Google API key...' : 'sk-...'
               }
               style={{ width: '100%', padding: '6px', fontSize: '14px' }}
             />
           </div>
 
           {/* Azure OpenAI Specific Fields */}
-          {llmSettings.provider === 'azure-openai' && (
+          {settings.llmProvider === 'azure-openai' && (
             <>
               <div style={{ marginBottom: '12px' }}>
                 <label style={{ fontSize: '12px', color: '#666' }}>Azure OpenAI Endpoint</label>
                 <input
                   type="text"
-                  value={llmSettings.azureOpenAIEndpoint || ''}
-                  onChange={(e) => setLLMSettings(prev => ({ ...prev, azureOpenAIEndpoint: e.target.value }))}
+                  value={settings.azureOpenAIEndpoint || ''}
+                  onChange={(e) => updateSetting('azureOpenAIEndpoint', e.target.value)}
                   placeholder="https://your-resource.openai.azure.com"
                   style={{ width: '100%', padding: '6px', fontSize: '14px' }}
                 />
@@ -965,8 +1108,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 <label style={{ fontSize: '12px', color: '#666' }}>API Version</label>
                 <input
                   type="text"
-                  value={llmSettings.azureOpenAIApiVersion || '2024-02-01'}
-                  onChange={(e) => setLLMSettings(prev => ({ ...prev, azureOpenAIApiVersion: e.target.value }))}
+                  value={settings.azureOpenAIApiVersion || '2024-02-01'}
+                  onChange={(e) => updateSetting('azureOpenAIApiVersion', e.target.value)}
                   placeholder="2024-02-01"
                   style={{ width: '100%', padding: '6px', fontSize: '14px' }}
                 />
@@ -977,30 +1120,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <div>
               <label style={{ fontSize: '12px', color: '#666' }}>
-                Temperature: {llmSettings.temperature}
+                Temperature: 0.1 (fixed)
               </label>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.1"
-                value={llmSettings.temperature}
-                onChange={(e) => setLLMSettings(prev => ({ ...prev, temperature: parseFloat(e.target.value) }))}
-                style={{ width: '100%' }}
-              />
+                <div style={{ fontSize: '12px', color: '#888', marginTop: '4px' }}>
+                Using optimized temperature for code analysis
+              </div>
             </div>
             
             <div>
-              <label style={{ fontSize: '12px', color: '#666' }}>Max Tokens</label>
-              <input
-                type="number"
-                min="100"
-                max="8000"
-                step="100"
-                value={llmSettings.maxTokens}
-                onChange={(e) => setLLMSettings(prev => ({ ...prev, maxTokens: parseInt(e.target.value) }))}
-                style={{ width: '100%', padding: '6px', fontSize: '14px' }}
-              />
+              <label style={{ fontSize: '12px', color: '#666' }}>Token Limits: Auto (OpenAI managed)</label>
+              <div style={{ fontSize: '12px', color: '#888', marginTop: '4px' }}>
+                OpenAI automatically manages token limits based on model capabilities
+              </div>
             </div>
           </div>
 
@@ -1008,19 +1139,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
             <button
               onClick={() => {
-                // Save to localStorage
-                localStorage.setItem('llm_provider', llmSettings.provider);
-                localStorage.setItem('llm_api_key', llmSettings.apiKey);
-                if (llmSettings.azureOpenAIEndpoint) {
-                  localStorage.setItem('azure_openai_endpoint', llmSettings.azureOpenAIEndpoint);
-                }
-                // For Azure OpenAI, the model field contains the deployment name
-                if (llmSettings.provider === 'azure-openai' && llmSettings.azureOpenAIDeploymentName) {
-                  localStorage.setItem('azure_openai_deployment', llmSettings.azureOpenAIDeploymentName);
-                }
-                if (llmSettings.azureOpenAIApiVersion) {
-                  localStorage.setItem('azure_openai_api_version', llmSettings.azureOpenAIApiVersion);
-                }
+                // Settings are automatically saved by useSettings hook
                 setShowSettings(false);
                 alert('Settings saved successfully!');
               }}

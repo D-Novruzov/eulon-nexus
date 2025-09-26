@@ -10,6 +10,7 @@ import { IngestionService } from '../../services/ingestion.service.ts';
 import { LLMService, type LLMProvider } from '../../ai/llm-service.ts';
 import { exportAndDownloadGraph, exportAndDownloadGraphAsCSV } from '../../lib/export.ts';
 import type { ExportFormat } from '../components/ExportFormatModal.tsx';
+import { useSettings } from '../hooks/useSettings.ts';
 
 interface AppState {
   // Data
@@ -34,13 +35,7 @@ interface AppState {
   progress: string;
   error: string;
   
-  // Settings
-  llmProvider: LLMProvider;
-  llmApiKey: string;
-  // Azure OpenAI specific settings
-  azureOpenAIEndpoint: string;
-  azureOpenAIDeploymentName: string;
-  azureOpenAIApiVersion: string;
+  // Settings managed separately via useSettings hook
   showSettings: boolean;
 }
 
@@ -59,11 +54,6 @@ const initialState: AppState = {
   isProcessing: false,
   progress: '',
   error: '',
-  llmProvider: (localStorage.getItem('llm_provider') as LLMProvider) || 'openai',
-  llmApiKey: localStorage.getItem('llm_api_key') || '',
-  azureOpenAIEndpoint: localStorage.getItem('azure_openai_endpoint') || '',
-  azureOpenAIDeploymentName: localStorage.getItem('azure_openai_deployment') || '',
-  azureOpenAIApiVersion: localStorage.getItem('azure_openai_api_version') || '2024-02-01',
   showSettings: false
 };
 
@@ -74,6 +64,9 @@ const HomePage: React.FC = () => {
     ingestion: new IngestionService(),
     llm: new LLMService()
   }));
+  
+  // Use settings hook for LLM configuration
+  const { settings, updateSetting, getCurrentProviderApiKey, updateCurrentProviderApiKey } = useSettings();
 
   const updateState = useCallback((updates: Partial<AppState>) => {
     setState(prev => ({ ...prev, ...updates }));
@@ -83,25 +76,12 @@ const HomePage: React.FC = () => {
     updateState({ selectedNodeId: nodeId });
   };
 
-  // Save LLM settings to localStorage
+  // Save GitHub token to localStorage
   useEffect(() => {
-    if (state.llmApiKey) {
-      localStorage.setItem('llm_api_key', state.llmApiKey);
-    }
-    localStorage.setItem('llm_provider', state.llmProvider);
-    if (state.azureOpenAIEndpoint) {
-      localStorage.setItem('azure_openai_endpoint', state.azureOpenAIEndpoint);
-    }
-    if (state.azureOpenAIDeploymentName) {
-      localStorage.setItem('azure_openai_deployment', state.azureOpenAIDeploymentName);
-    }
-    if (state.azureOpenAIApiVersion) {
-      localStorage.setItem('azure_openai_api_version', state.azureOpenAIApiVersion);
-    }
     if (state.githubToken) {
       localStorage.setItem('github_token', state.githubToken);
     }
-  }, [state.llmApiKey, state.llmProvider, state.azureOpenAIEndpoint, state.azureOpenAIDeploymentName, state.azureOpenAIApiVersion, state.githubToken]);
+  }, [state.githubToken]);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -221,13 +201,14 @@ const HomePage: React.FC = () => {
   };
 
   const isApiKeyValid = (() => {
-    if (state.llmProvider === 'azure-openai') {
+    const currentApiKey = getCurrentProviderApiKey();
+    if (settings.llmProvider === 'azure-openai') {
       // For Azure OpenAI, we need to validate all required fields
-      return services.llm.validateApiKey(state.llmProvider, state.llmApiKey) &&
-             state.azureOpenAIEndpoint.trim() !== '' &&
-             state.azureOpenAIDeploymentName.trim() !== '';
+      return services.llm.validateApiKey(settings.llmProvider, currentApiKey) &&
+             settings.azureOpenAIEndpoint.trim() !== '' &&
+             settings.azureOpenAIDeploymentName.trim() !== '';
     }
-    return services.llm.validateApiKey(state.llmProvider, state.llmApiKey);
+    return services.llm.validateApiKey(settings.llmProvider, currentApiKey);
   })();
   const isGraphValid = state.graph && state.graph.nodes && Array.isArray(state.graph.nodes) && state.graph.relationships && Array.isArray(state.graph.relationships);
 
@@ -872,8 +853,8 @@ const HomePage: React.FC = () => {
               <div style={styles.inputGroup}>
                 <label style={styles.label}>LLM Provider</label>
                 <select
-                  value={state.llmProvider}
-                  onChange={(e) => updateState({ llmProvider: e.target.value as LLMProvider })}
+                  value={settings.llmProvider}
+                  onChange={(e) => updateSetting('llmProvider', e.target.value as LLMProvider)}
                   style={{
                     ...styles.input,
                     cursor: 'pointer'
@@ -889,32 +870,32 @@ const HomePage: React.FC = () => {
               {/* API Key */}
               <div style={styles.inputGroup}>
                 <label style={styles.label}>
-                  {state.llmProvider === 'azure-openai' ? 'Azure OpenAI API Key' : 
-                   state.llmProvider === 'anthropic' ? 'Anthropic API Key' :
-                   state.llmProvider === 'gemini' ? 'Google API Key' : 'OpenAI API Key'}
+                  {settings.llmProvider === 'azure-openai' ? 'Azure OpenAI API Key' : 
+                   settings.llmProvider === 'anthropic' ? 'Anthropic API Key' :
+                   settings.llmProvider === 'gemini' ? 'Google API Key' : 'OpenAI API Key'}
                 </label>
                 <input
                   type="password"
-                  value={state.llmApiKey}
-                  onChange={(e) => updateState({ llmApiKey: e.target.value })}
+                  value={getCurrentProviderApiKey()}
+                  onChange={(e) => updateCurrentProviderApiKey(e.target.value)}
                   placeholder={
-                    state.llmProvider === 'azure-openai' ? 'Your Azure OpenAI key...' :
-                    state.llmProvider === 'anthropic' ? 'sk-ant-...' :
-                    state.llmProvider === 'gemini' ? 'Your Google API key...' : 'sk-...'
+                    settings.llmProvider === 'azure-openai' ? 'Your Azure OpenAI key...' :
+                    settings.llmProvider === 'anthropic' ? 'sk-ant-...' :
+                    settings.llmProvider === 'gemini' ? 'Your Google API key...' : 'sk-...'
                   }
                   style={styles.input}
                 />
               </div>
 
               {/* Azure OpenAI Specific Fields */}
-              {state.llmProvider === 'azure-openai' && (
+              {settings.llmProvider === 'azure-openai' && (
                 <>
                   <div style={styles.inputGroup}>
                     <label style={styles.label}>Azure OpenAI Endpoint</label>
                     <input
                       type="text"
-                      value={state.azureOpenAIEndpoint}
-                      onChange={(e) => updateState({ azureOpenAIEndpoint: e.target.value })}
+                      value={settings.azureOpenAIEndpoint}
+                      onChange={(e) => updateSetting('azureOpenAIEndpoint', e.target.value)}
                       placeholder="https://your-resource.openai.azure.com"
                       style={styles.input}
                     />
@@ -927,8 +908,8 @@ const HomePage: React.FC = () => {
                     <label style={styles.label}>Deployment Name</label>
                     <input
                       type="text"
-                      value={state.azureOpenAIDeploymentName}
-                      onChange={(e) => updateState({ azureOpenAIDeploymentName: e.target.value })}
+                      value={settings.azureOpenAIDeploymentName}
+                      onChange={(e) => updateSetting('azureOpenAIDeploymentName', e.target.value)}
                       placeholder="gpt-4o-mini"
                       style={styles.input}
                     />
@@ -941,8 +922,8 @@ const HomePage: React.FC = () => {
                     <label style={styles.label}>API Version</label>
                     <input
                       type="text"
-                      value={state.azureOpenAIApiVersion}
-                      onChange={(e) => updateState({ azureOpenAIApiVersion: e.target.value })}
+                      value={settings.azureOpenAIApiVersion}
+                      onChange={(e) => updateSetting('azureOpenAIApiVersion', e.target.value)}
                       placeholder="2024-02-01"
                       style={styles.input}
                     />
@@ -974,7 +955,7 @@ const HomePage: React.FC = () => {
                 </div>
                 {!isApiKeyValid && (
                   <div style={{ fontSize: '12px', color: '#C53030', marginTop: '4px' }}>
-                    {state.llmProvider === 'azure-openai' 
+                    {settings.llmProvider === 'azure-openai' 
                       ? 'Please provide API key, endpoint, and deployment name'
                       : 'Please provide a valid API key'}
                   </div>
@@ -993,10 +974,10 @@ const HomePage: React.FC = () => {
                   📋 Provider Information
                 </div>
                 <div style={{ fontSize: '12px', color: colors.textMuted, lineHeight: '1.5' }}>
-                  {state.llmProvider === 'openai' && 'Direct OpenAI API. Get your API key from platform.openai.com'}
-                  {state.llmProvider === 'azure-openai' && 'Azure OpenAI Service. Requires Azure subscription and deployed model.'}
-                  {state.llmProvider === 'anthropic' && 'Anthropic Claude API. Get your API key from console.anthropic.com'}
-                  {state.llmProvider === 'gemini' && 'Google Gemini API. Get your API key from aistudio.google.com'}
+                  {settings.llmProvider === 'openai' && 'Direct OpenAI API. Get your API key from platform.openai.com'}
+                  {settings.llmProvider === 'azure-openai' && 'Azure OpenAI Service. Requires Azure subscription and deployed model.'}
+                  {settings.llmProvider === 'anthropic' && 'Anthropic Claude API. Get your API key from console.anthropic.com'}
+                  {settings.llmProvider === 'gemini' && 'Google Gemini API. Get your API key from aistudio.google.com'}
                 </div>
               </div>
               </div>
@@ -1010,13 +991,7 @@ const HomePage: React.FC = () => {
                     } else {
                       localStorage.removeItem('github_token');
                     }
-                    localStorage.setItem('llm_provider', state.llmProvider);
-                    localStorage.setItem('llm_api_key', state.llmApiKey);
-                    if (state.llmProvider === 'azure-openai') {
-                      localStorage.setItem('azure_openai_endpoint', state.azureOpenAIEndpoint);
-                      localStorage.setItem('azure_openai_deployment', state.azureOpenAIDeploymentName);
-                      localStorage.setItem('azure_openai_api_version', state.azureOpenAIApiVersion);
-                    }
+                    // Settings are automatically saved via useSettings hook
                     updateState({ showSettings: false });
                   }}
                   style={styles.primaryButton}

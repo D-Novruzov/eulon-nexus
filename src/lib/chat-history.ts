@@ -432,9 +432,10 @@ export class ChatSessionManager {
   static deleteSession(sessionId: string): void {
     LocalStorageChatHistory.deleteSession(sessionId);
     
-    // If we deleted the current session, create a new one
+    // If we deleted the current session, clear the current session
+    // Let the caller decide whether to create a new one
     if (this.getCurrentSession() === sessionId) {
-      this.createSession();
+      localStorage.removeItem(this.CURRENT_SESSION_KEY);
     }
   }
 

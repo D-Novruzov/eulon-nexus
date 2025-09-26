@@ -49,6 +49,13 @@ export class EnhancedSessionManager {
   }
 
   /**
+   * Get the current active session ID
+   */
+  getCurrentSession(): string | null {
+    return ChatSessionManager.getCurrentSession();
+  }
+
+  /**
    * Create a new session with enhanced options
    */
   createSession(options: {
@@ -115,7 +122,20 @@ export class EnhancedSessionManager {
       return false;
     }
     
+    const wasCurrentSession = ChatSessionManager.getCurrentSession() === sessionId;
     ChatSessionManager.deleteSession(sessionId);
+    
+    // If we deleted the current session and there are other sessions, 
+    // switch to the most recently accessed one
+    if (wasCurrentSession) {
+      const remainingSessions = ChatSessionManager.getAllSessions();
+      if (remainingSessions.length > 0) {
+        // Sort by last accessed time and switch to the most recent
+        const sortedSessions = remainingSessions.sort((a, b) => b.lastAccessed - a.lastAccessed);
+        ChatSessionManager.setCurrentSession(sortedSessions[0].id);
+      }
+    }
+    
     return true;
   }
 
@@ -361,7 +381,8 @@ export class EnhancedSessionManager {
           continue;
         }
         
-        ChatSessionManager.deleteSession(session.id);
+        // Use force delete to avoid switching sessions during cleanup
+        this.deleteSession(session.id, { force: true });
       }
       
       // Ensure we always have at least one session

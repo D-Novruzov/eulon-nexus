@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { featureFlagManager } from '../../config/features.ts';
+import { isParallelParsingEnabled } from '../../config/features.ts';
 import type { LLMProvider } from '../../ai/llm-service';
 
 type ParsingMode = 'single' | 'parallel';
@@ -12,7 +12,10 @@ interface SettingsState {
   
   // LLM settings
   llmProvider: LLMProvider;
-  llmApiKey: string;
+  openaiApiKey: string;
+  azureApiKey: string;
+  anthropicApiKey: string;
+  geminiApiKey: string;
   azureOpenAIEndpoint: string;
   azureOpenAIDeploymentName: string;
   azureOpenAIApiVersion: string;
@@ -32,6 +35,8 @@ interface UseSettingsReturn {
   hideSettings: () => void;
   resetSettings: () => void;
   saveSettings: () => void;
+  getCurrentProviderApiKey: () => string;
+  updateCurrentProviderApiKey: (apiKey: string) => void;
 }
 
 const DEFAULT_SETTINGS: SettingsState = {
@@ -42,7 +47,10 @@ const DEFAULT_SETTINGS: SettingsState = {
   
   // LLM settings
   llmProvider: 'openai',
-  llmApiKey: '',
+  openaiApiKey: '',
+  azureApiKey: '',
+  anthropicApiKey: '',
+  geminiApiKey: '',
   azureOpenAIEndpoint: '',
   azureOpenAIDeploymentName: '',
   azureOpenAIApiVersion: '2024-02-01',
@@ -63,16 +71,32 @@ export const useSettings = (): UseSettingsReturn => {
     const loadedSettings = { ...DEFAULT_SETTINGS };
     
     try {
+      // Handle migration from old single API key to provider-specific keys
+      const oldApiKey = localStorage.getItem('llm_api_key');
+      const currentProvider = (localStorage.getItem('llm_provider') as LLMProvider) || 'openai';
+      
       // Load individual settings from localStorage
       const stored = {
-        llmProvider: localStorage.getItem('llm_provider') as LLMProvider,
-        llmApiKey: localStorage.getItem('llm_api_key') || '',
+        llmProvider: currentProvider,
+        openaiApiKey: localStorage.getItem('openai_api_key') || 
+          (currentProvider === 'openai' ? oldApiKey || '' : ''),
+        azureApiKey: localStorage.getItem('azure_api_key') || 
+          (currentProvider === 'azure-openai' ? oldApiKey || '' : ''),
+        anthropicApiKey: localStorage.getItem('anthropic_api_key') || 
+          (currentProvider === 'anthropic' ? oldApiKey || '' : ''),
+        geminiApiKey: localStorage.getItem('gemini_api_key') || 
+          (currentProvider === 'gemini' ? oldApiKey || '' : ''),
         azureOpenAIEndpoint: localStorage.getItem('azure_openai_endpoint') || '',
         azureOpenAIDeploymentName: localStorage.getItem('azure_openai_deployment') || '',
         azureOpenAIApiVersion: localStorage.getItem('azure_openai_api_version') || '2024-02-01',
         githubToken: localStorage.getItem('github_token') || '',
-        parsingMode: (featureFlagManager.isParallelParsingEnabled() ? 'parallel' : 'single') as ParsingMode
+        parsingMode: (isParallelParsingEnabled() ? 'parallel' : 'single') as ParsingMode
       };
+      
+      // Clean up old API key after migration
+      if (oldApiKey) {
+        localStorage.removeItem('llm_api_key');
+      }
       
       Object.assign(loadedSettings, stored);
     } catch (error) {
@@ -82,20 +106,12 @@ export const useSettings = (): UseSettingsReturn => {
     return loadedSettings;
   });
   
-  // Listen to feature flag changes
+  // Set parsing mode based on feature flags on mount
   useEffect(() => {
-    const handleFlagChanges = (flags: any) => {
-      setSettings(prev => ({
-        ...prev,
-        parsingMode: (flags.enableParallelParsing ? 'parallel' : 'single') as ParsingMode
-      }));
-    };
-    
-    featureFlagManager.addListener(handleFlagChanges);
-    
-    return () => {
-      featureFlagManager.removeListener(handleFlagChanges);
-    };
+    setSettings(prev => ({
+      ...prev,
+      parsingMode: (isParallelParsingEnabled() ? 'parallel' : 'single') as ParsingMode
+    }));
   }, []);
   
   const updateSetting = useCallback(<K extends keyof SettingsState>(
@@ -111,8 +127,21 @@ export const useSettings = (): UseSettingsReturn => {
           case 'llmProvider':
             localStorage.setItem('llm_provider', value as string);
             break;
-          case 'llmApiKey':
-            if (value) localStorage.setItem('llm_api_key', value as string);
+          case 'openaiApiKey':
+            if (value) localStorage.setItem('openai_api_key', value as string);
+            else localStorage.removeItem('openai_api_key');
+            break;
+          case 'azureApiKey':
+            if (value) localStorage.setItem('azure_api_key', value as string);
+            else localStorage.removeItem('azure_api_key');
+            break;
+          case 'anthropicApiKey':
+            if (value) localStorage.setItem('anthropic_api_key', value as string);
+            else localStorage.removeItem('anthropic_api_key');
+            break;
+          case 'geminiApiKey':
+            if (value) localStorage.setItem('gemini_api_key', value as string);
+            else localStorage.removeItem('gemini_api_key');
             break;
           case 'azureOpenAIEndpoint':
             if (value) localStorage.setItem('azure_openai_endpoint', value as string);
@@ -127,7 +156,6 @@ export const useSettings = (): UseSettingsReturn => {
             if (value) localStorage.setItem('github_token', value as string);
             break;
           case 'parsingMode':
-            featureFlagManager.setFlag('enableParallelParsing', value === 'parallel');
             localStorage.setItem('parsing_mode', value as string);
             break;
         }
@@ -158,24 +186,31 @@ export const useSettings = (): UseSettingsReturn => {
     
     // Clear localStorage
     try {
-      localStorage.removeItem('llm_api_key');
+      localStorage.removeItem('openai_api_key');
+      localStorage.removeItem('azure_api_key');
+      localStorage.removeItem('anthropic_api_key');
+      localStorage.removeItem('gemini_api_key');
       localStorage.removeItem('llm_provider');
       localStorage.removeItem('azure_openai_endpoint');
       localStorage.removeItem('azure_openai_deployment');
       localStorage.removeItem('azure_openai_api_version');
       localStorage.removeItem('github_token');
+      // Also remove old key if it still exists
+      localStorage.removeItem('llm_api_key');
     } catch (error) {
       console.warn('Failed to clear settings from localStorage:', error);
     }
     
-    // Reset feature flags
-    featureFlagManager.resetFlags();
+    // Feature flags are managed via config file, no reset needed
   }, []);
   
   const saveSettings = useCallback(() => {
     // Force save all settings to localStorage
     try {
-      if (settings.llmApiKey) localStorage.setItem('llm_api_key', settings.llmApiKey);
+      if (settings.openaiApiKey) localStorage.setItem('openai_api_key', settings.openaiApiKey);
+      if (settings.azureApiKey) localStorage.setItem('azure_api_key', settings.azureApiKey);
+      if (settings.anthropicApiKey) localStorage.setItem('anthropic_api_key', settings.anthropicApiKey);
+      if (settings.geminiApiKey) localStorage.setItem('gemini_api_key', settings.geminiApiKey);
       localStorage.setItem('llm_provider', settings.llmProvider);
       if (settings.azureOpenAIEndpoint) localStorage.setItem('azure_openai_endpoint', settings.azureOpenAIEndpoint);
       if (settings.azureOpenAIDeploymentName) localStorage.setItem('azure_openai_deployment', settings.azureOpenAIDeploymentName);
@@ -187,6 +222,53 @@ export const useSettings = (): UseSettingsReturn => {
       console.error('❌ Failed to save settings:', error);
     }
   }, [settings]);
+
+  const getCurrentProviderApiKey = useCallback((): string => {
+    const result = (() => {
+      switch (settings.llmProvider) {
+        case 'openai':
+          return settings.openaiApiKey;
+        case 'azure-openai':
+          return settings.azureApiKey;
+        case 'anthropic':
+          return settings.anthropicApiKey;
+        case 'gemini':
+          return settings.geminiApiKey;
+        default:
+          return '';
+      }
+    })();
+    
+    console.log('🔑 getCurrentProviderApiKey:', {
+      provider: settings.llmProvider,
+      returnedKey: result ? `${result.substring(0, 6)}...` : 'empty',
+      allKeys: {
+        openai: settings.openaiApiKey ? `${settings.openaiApiKey.substring(0, 6)}...` : 'empty',
+        azure: settings.azureApiKey ? `${settings.azureApiKey.substring(0, 6)}...` : 'empty',
+        anthropic: settings.anthropicApiKey ? `${settings.anthropicApiKey.substring(0, 6)}...` : 'empty',
+        gemini: settings.geminiApiKey ? `${settings.geminiApiKey.substring(0, 6)}...` : 'empty'
+      }
+    });
+    
+    return result;
+  }, [settings.llmProvider, settings.openaiApiKey, settings.azureApiKey, settings.anthropicApiKey, settings.geminiApiKey]);
+
+  const updateCurrentProviderApiKey = useCallback((apiKey: string) => {
+    switch (settings.llmProvider) {
+      case 'openai':
+        updateSetting('openaiApiKey', apiKey);
+        break;
+      case 'azure-openai':
+        updateSetting('azureApiKey', apiKey);
+        break;
+      case 'anthropic':
+        updateSetting('anthropicApiKey', apiKey);
+        break;
+      case 'gemini':
+        updateSetting('geminiApiKey', apiKey);
+        break;
+    }
+  }, [settings.llmProvider, updateSetting]);
   
   return {
     settings,
@@ -195,6 +277,8 @@ export const useSettings = (): UseSettingsReturn => {
     showSettings,
     hideSettings,
     resetSettings,
-    saveSettings
+    saveSettings,
+    getCurrentProviderApiKey,
+    updateCurrentProviderApiKey
   };
 };
