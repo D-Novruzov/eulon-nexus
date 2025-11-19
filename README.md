@@ -5,10 +5,26 @@ GitNexus is a privacy-focused, zero-server knowledge graph generator that runs e
 
 https://github.com/user-attachments/assets/6f13bd45-d6e9-4f4e-a360-ceb66f41c741
 
+## Project focus:
+
+- A privacy focus, zero cost and efficient tool to create knowledge graph from codebases within the browser. 
+- Knowledge Graph creation useful for both humans and AI agents.
+- A way to index the codebase within the browser making if lot faster and cheaper than using embedings model to create vector based embedings and traditional RAG based retrieval
+- Ae efficient tool to understand a codebase by knowledge graph visualization and Graph RAG chatbot for accurate context retrieval
+
+## AI Focus:
+
+ - Compute blast radius for a function or module change, enumerate affected endpoints/tests, and plan safe edits
+ - Start from a failing symbol and traverse callers/callees and imports to isolate the real fault line faster than grep or embeddings alone.
+ - Detect orphaned nodes, unresolved imports, and unused functions with simple graph queries
+ - Onboarding, audits and spot forbidden dependencies or layer violation quickly.
+
 ## Current Work in Progress:
 
 - Ollama support
 - Export as csv ( for both node and relation table )
+- Context engineering
+- Figuring out a way to setup CFG ( Control Flow Graph ) and use it in AI context
 
 
 ## Features
