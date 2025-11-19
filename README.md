@@ -21,6 +21,7 @@ https://github.com/user-attachments/assets/6f13bd45-d6e9-4f4e-a360-ceb66f41c741
 
 ## Current Work in Progress:
 
+- Researching a way to make Graph RAG retrievals better and not fail. Using pre made cyfer queries as tools seems like a better approach instead of letting LLM generate cyfer realtime. 
 - Ollama support
 - Export as csv ( for both node and relation table )
 - Context engineering
