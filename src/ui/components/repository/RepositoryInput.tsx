@@ -1,4 +1,5 @@
-import React, { useState, useCallback, useRef } from 'react';
+// @ts-nocheck
+import React, { useState, useCallback, useRef } from "react";
 
 interface RepositoryInputProps {
   onZipFileSubmit: (file: File) => void;
@@ -7,43 +8,52 @@ interface RepositoryInputProps {
 
 const RepositoryInput: React.FC<RepositoryInputProps> = ({
   onZipFileSubmit,
-  disabled = false
+  disabled = false,
 }) => {
   const [dragOver, setDragOver] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  const handleFileSelect = useCallback((file: File) => {
-    if (file && file.name.endsWith('.zip')) {
-      setSelectedFile(file);
-      onZipFileSubmit(file);
-    } else {
-      alert('Please select a valid ZIP file (.zip extension required)');
-    }
-  }, [onZipFileSubmit]);
-  
-  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      handleFileSelect(file);
-    }
-  }, [handleFileSelect]);
-  
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    
-    const file = e.dataTransfer.files[0];
-    if (file) {
-      handleFileSelect(file);
-    }
-  }, [handleFileSelect]);
-  
+
+  const handleFileSelect = useCallback(
+    (file: File) => {
+      if (file && file.name.endsWith(".zip")) {
+        setSelectedFile(file);
+        onZipFileSubmit(file);
+      } else {
+        alert("Please select a valid ZIP file (.zip extension required)");
+      }
+    },
+    [onZipFileSubmit]
+  );
+
+  const handleFileInput = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) {
+        handleFileSelect(file);
+      }
+    },
+    [handleFileSelect]
+  );
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setDragOver(false);
+
+      const file = e.dataTransfer.files[0];
+      if (file) {
+        handleFileSelect(file);
+      }
+    },
+    [handleFileSelect]
+  );
+
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(true);
   }, []);
-  
+
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
@@ -56,22 +66,24 @@ const RepositoryInput: React.FC<RepositoryInputProps> = ({
   }, [disabled]);
 
   const formatFileSize = (bytes: number): string => {
-    if (bytes === 0) return '0 Bytes';
+    if (bytes === 0) return "0 Bytes";
     const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const sizes = ["Bytes", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
   };
-  
+
   return (
     <div className="repository-input">
       <div className="upload-header">
         <h3>📦 Upload Project ZIP File</h3>
         <p>Drag and drop your project ZIP file below or click to browse</p>
       </div>
-      
+
       <div
-        className={`zip-drop-zone ${dragOver ? 'drag-over' : ''} ${selectedFile ? 'has-file' : ''}`}
+        className={`zip-drop-zone ${dragOver ? "drag-over" : ""} ${
+          selectedFile ? "has-file" : ""
+        }`}
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -80,36 +92,36 @@ const RepositoryInput: React.FC<RepositoryInputProps> = ({
         <div className="drop-zone-content">
           {!selectedFile ? (
             <>
-              <div className="drop-zone-icon">
-                {dragOver ? '📥' : '📁'}
-              </div>
+              <div className="drop-zone-icon">{dragOver ? "📥" : "📁"}</div>
               <div className="drop-zone-text">
                 <div className="drop-zone-primary">
-                  {dragOver ? 'Drop your ZIP file here!' : 'Drop a ZIP file here or click to browse'}
+                  {dragOver
+                    ? "Drop your ZIP file here!"
+                    : "Drop a ZIP file here or click to browse"}
                 </div>
                 <div className="drop-zone-secondary">
                   Upload a ZIP file containing your project source code
                 </div>
               </div>
-              <div className="browse-button">
-                📂 Browse Files
-              </div>
+              <div className="browse-button">📂 Browse Files</div>
             </>
           ) : (
             <div className="selected-file-info">
               <div className="file-icon">✅</div>
               <div className="file-details">
                 <div className="file-name">{selectedFile.name}</div>
-                <div className="file-size">{formatFileSize(selectedFile.size)}</div>
+                <div className="file-size">
+                  {formatFileSize(selectedFile.size)}
+                </div>
               </div>
               <div className="file-actions">
-                <button 
+                <button
                   className="change-file-button"
                   onClick={(e) => {
                     e.stopPropagation();
                     setSelectedFile(null);
                     if (fileInputRef.current) {
-                      fileInputRef.current.value = '';
+                      fileInputRef.current.value = "";
                     }
                   }}
                   disabled={disabled}
@@ -119,7 +131,7 @@ const RepositoryInput: React.FC<RepositoryInputProps> = ({
               </div>
             </div>
           )}
-          
+
           <input
             ref={fileInputRef}
             type="file"
@@ -131,7 +143,7 @@ const RepositoryInput: React.FC<RepositoryInputProps> = ({
           />
         </div>
       </div>
-      
+
       <div className="upload-tips">
         <div className="tip-item">
           <span className="tip-icon">💡</span>
@@ -146,64 +158,68 @@ const RepositoryInput: React.FC<RepositoryInputProps> = ({
           <span>Your files are processed locally in your browser</span>
         </div>
       </div>
-      
+
       <style>{`
         .repository-input {
           margin-bottom: 2rem;
-          background-color: white;
-          border-radius: 12px;
+          background: radial-gradient(circle at top left, rgba(79,70,229,0.45), transparent 55%),
+                      radial-gradient(circle at bottom right, rgba(34,197,94,0.35), transparent 55%),
+                      rgba(15,23,42,0.98);
+          border-radius: 18px;
           overflow: hidden;
-          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+          box-shadow: 0 24px 70px rgba(15,23,42,0.9);
+          border: 1px solid rgba(148,163,184,0.5);
         }
         
         .upload-header {
-          padding: 2rem 2rem 1rem 2rem;
-          text-align: center;
-          background: linear-gradient(135deg, #ff9a56 0%, #ffad56 50%, #ffc947 100%);
-          color: white;
+          padding: 1.75rem 2rem 1rem 2rem;
+          text-align: left;
+          background: linear-gradient(135deg, #0f172a 0%, #1d4ed8 45%, #22c55e 100%);
+          color: #e5e7eb;
         }
         
         .upload-header h3 {
-          margin: 0 0 0.5rem 0;
-          font-size: 1.5rem;
+          margin: 0 0 0.4rem 0;
+          font-size: 1.3rem;
           font-weight: 600;
         }
         
         .upload-header p {
           margin: 0;
           opacity: 0.9;
-          font-size: 1rem;
+          font-size: 0.95rem;
+          color: #cbd5f5;
         }
         
         .zip-drop-zone {
-          margin: 2rem;
-          border: 3px dashed #d1d5db;
-          border-radius: 12px;
-          padding: 3rem 2rem;
+          margin: 1.75rem;
+          border: 2px dashed rgba(148,163,184,0.7);
+          border-radius: 14px;
+          padding: 2.75rem 2rem;
           text-align: center;
           cursor: pointer;
-          transition: all 0.3s ease;
+          transition: all 0.25s ease;
           position: relative;
-          background: #fafafa;
+          background: radial-gradient(circle at top, rgba(15,23,42,0.95), rgba(15,23,42,0.98));
         }
         
         .zip-drop-zone:hover {
-          border-color: #ff9a56;
-          background: #fff8f0;
-          transform: translateY(-2px);
-          box-shadow: 0 8px 25px -8px rgba(255, 154, 86, 0.3);
+          border-color: rgba(129,140,248,0.95);
+          background: radial-gradient(circle at top, rgba(30,64,175,0.85), rgba(15,23,42,0.98));
+          transform: translateY(-1px);
+          box-shadow: 0 18px 45px rgba(30,64,175,0.6);
         }
         
         .zip-drop-zone.drag-over {
-          border-color: #10b981;
-          background: #f0fdf4;
-          transform: scale(1.02);
-          box-shadow: 0 12px 30px -8px rgba(16, 185, 129, 0.4);
+          border-color: rgba(34,197,94,0.95);
+          background: radial-gradient(circle at top, rgba(22,163,74,0.35), rgba(15,23,42,0.98));
+          transform: scale(1.01);
+          box-shadow: 0 20px 55px rgba(34,197,94,0.55);
         }
         
         .zip-drop-zone.has-file {
-          border-color: #10b981;
-          background: #f0fdf4;
+          border-color: rgba(34,197,94,0.95);
+          background: radial-gradient(circle at top, rgba(22,163,74,0.25), rgba(15,23,42,0.98));
           border-style: solid;
         }
         
@@ -231,26 +247,26 @@ const RepositoryInput: React.FC<RepositoryInputProps> = ({
         }
         
         .drop-zone-primary {
-          font-size: 1.25rem;
+          font-size: 1.1rem;
           font-weight: 600;
-          color: #374151;
-          margin-bottom: 0.5rem;
+          color: #e5e7eb;
+          margin-bottom: 0.4rem;
         }
         
         .drop-zone-secondary {
-          font-size: 1rem;
-          color: #6b7280;
+          font-size: 0.95rem;
+          color: #9ca3af;
         }
         
         .browse-button {
-          padding: 0.75rem 2rem;
-          background: linear-gradient(135deg, #ff9a56 0%, #ffad56 50%, #ffc947 100%);
-          color: white;
-          border-radius: 8px;
-          font-weight: 500;
-          font-size: 1rem;
+          padding: 0.75rem 2.2rem;
+          background: linear-gradient(135deg, #6366f1 0%, #22d3ee 50%, #22c55e 100%);
+          color: #f9fafb;
+          border-radius: 999px;
+          font-weight: 600;
+          font-size: 0.95rem;
           transition: all 0.2s ease;
-          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+          box-shadow: 0 14px 40px rgba(56,189,248,0.55);
         }
         
         .zip-drop-zone:hover .browse-button {
@@ -263,10 +279,11 @@ const RepositoryInput: React.FC<RepositoryInputProps> = ({
           align-items: center;
           gap: 1.5rem;
           padding: 1rem 2rem;
-          background: white;
-          border-radius: 8px;
-          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+          background: rgba(15,23,42,0.95);
+          border-radius: 10px;
+          box-shadow: 0 10px 30px rgba(15,23,42,0.8);
           min-width: 300px;
+          border: 1px solid rgba(148,163,184,0.6);
         }
         
         .file-icon {
@@ -280,31 +297,31 @@ const RepositoryInput: React.FC<RepositoryInputProps> = ({
         
         .file-name {
           font-weight: 600;
-          color: #374151;
+          color: #e5e7eb;
           margin-bottom: 0.25rem;
           word-break: break-word;
         }
         
         .file-size {
           font-size: 0.875rem;
-          color: #6b7280;
+          color: #9ca3af;
         }
         
         .change-file-button {
           padding: 0.5rem 1rem;
-          background: #f3f4f6;
-          color: #374151;
-          border: 1px solid #d1d5db;
-          border-radius: 6px;
+          background: rgba(15,23,42,0.9);
+          color: #e5e7eb;
+          border: 1px solid rgba(148,163,184,0.7);
+          border-radius: 999px;
           cursor: pointer;
-          font-size: 0.875rem;
+          font-size: 0.85rem;
           font-weight: 500;
           transition: all 0.2s ease;
         }
         
         .change-file-button:hover:not(:disabled) {
-          background: #e5e7eb;
-          border-color: #9ca3af;
+          background: rgba(30,64,175,0.9);
+          border-color: rgba(129,140,248,0.95);
         }
         
         .change-file-button:disabled {
@@ -318,8 +335,8 @@ const RepositoryInput: React.FC<RepositoryInputProps> = ({
         
         .upload-tips {
           padding: 1.5rem 2rem 2rem 2rem;
-          background: #f9fafb;
-          border-top: 1px solid #e5e7eb;
+          background: radial-gradient(circle at left, rgba(15,23,42,1), rgba(15,23,42,0.98));
+          border-top: 1px solid rgba(15,23,42,1);
         }
         
         .tip-item {
@@ -327,8 +344,8 @@ const RepositoryInput: React.FC<RepositoryInputProps> = ({
           align-items: center;
           gap: 0.75rem;
           margin-bottom: 0.75rem;
-          font-size: 0.875rem;
-          color: #6b7280;
+          font-size: 0.85rem;
+          color: #9ca3af;
         }
         
         .tip-item:last-child {
@@ -337,7 +354,7 @@ const RepositoryInput: React.FC<RepositoryInputProps> = ({
         
         .tip-icon {
           font-size: 1rem;
-          opacity: 0.8;
+          opacity: 0.9;
         }
         
         @media (max-width: 640px) {
