@@ -243,23 +243,30 @@ app.get("/auth/github/callback", async (req: Request, res: Response) => {
     sessionStore.set(session);
 
     // In production (HTTPS), cookies must be secure
+    // Use sameSite: "none" for cross-site redirects from GitHub
     const isProduction = process.env.NODE_ENV === "production" || GITHUB_CALLBACK_URL.startsWith("https://");
     res.cookie(SESSION_COOKIE_NAME, sessionId, {
       httpOnly: true,
-      secure: isProduction,
-      sameSite: "lax",
+      secure: isProduction, // Must be true when sameSite is "none"
+      sameSite: isProduction ? "none" : "lax", // "none" for cross-site redirects
       path: "/",
     });
 
-    // Clear OAuth state cookie
-    res.clearCookie(STATE_COOKIE_NAME);
+    // Clear OAuth state cookie (use same settings as when it was set)
+    const isProductionForClear = process.env.NODE_ENV === "production" || GITHUB_CALLBACK_URL.startsWith("https://");
+    res.clearCookie(STATE_COOKIE_NAME, {
+      httpOnly: true,
+      secure: isProductionForClear,
+      sameSite: isProductionForClear ? "none" : "lax",
+      path: "/",
+    });
 
     // Redirect back to frontend with a lightweight flag.
     const redirectUrl = new URL(FRONTEND_ORIGIN);
     redirectUrl.searchParams.set("github_connected", "true");
+    console.log(`[OAuth] Successfully authenticated user ${githubUser.login}, redirecting to ${redirectUrl.toString()}`);
     res.redirect(302, redirectUrl.toString());
   } catch (error) {
-    // eslint-disable-next-line no-console
     console.error("GitHub OAuth callback error:", error);
     res.status(500).send("GitHub OAuth failed");
   }
