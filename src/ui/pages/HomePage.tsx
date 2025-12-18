@@ -325,13 +325,18 @@ const HomePage: React.FC = () => {
     container: {
       display: "flex",
       flexDirection: "column" as const,
+      minHeight: "100vh",
+      minWidth: "100vw",
       height: "100vh",
       width: "100vw",
+      maxHeight: "100vh",
+      maxWidth: "100vw",
       background:
         "radial-gradient(circle at top left, rgba(88,28,135,0.55), transparent 55%), radial-gradient(circle at bottom right, rgba(14,165,233,0.5), transparent 55%), #020617",
       fontFamily:
         "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
       overflow: "hidden",
+      boxSizing: "border-box" as const,
     },
 
     // Top navbar (only visible when project is loaded)
@@ -378,12 +383,18 @@ const HomePage: React.FC = () => {
       left: 0,
       right: 0,
       bottom: 0,
+      minHeight: "100vh",
+      minWidth: "100vw",
       background:
         "radial-gradient(circle at top left, rgba(76,29,149,0.7), transparent 55%), radial-gradient(circle at bottom right, rgba(8,47,73,0.9), transparent 55%), #020617",
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
       zIndex: 1000,
+      overflowY: "auto" as const,
+      overflowX: "hidden" as const,
+      padding: "20px",
+      boxSizing: "border-box" as const,
     },
 
     welcomeCard: {
@@ -394,8 +405,12 @@ const HomePage: React.FC = () => {
       boxShadow: "0 30px 80px rgba(15,23,42,0.95)",
       border: `1px solid rgba(148,163,184,0.4)`,
       maxWidth: "600px",
-      width: "90%",
+      width: "100%",
+      maxHeight: "90vh",
+      overflowY: "auto" as const,
       textAlign: "center" as const,
+      margin: "auto",
+      boxSizing: "border-box" as const,
     },
 
     welcomeTitle: {
@@ -550,8 +565,8 @@ const HomePage: React.FC = () => {
   };
 
   const renderWelcomeScreen = () => (
-    <div style={styles.welcomeOverlay}>
-      <div style={{...styles.welcomeCard}} className="welcome-card-mobile">
+    <div style={styles.welcomeOverlay} className="welcome-overlay-desktop">
+      <div style={{...styles.welcomeCard}} className="welcome-card-mobile welcome-card-desktop">
         <div style={{...styles.welcomeTitle}} className="welcome-title-responsive">
           <span>🔍</span>
           <span>GitNexus</span>
@@ -1345,12 +1360,41 @@ Don't worry though - you can always re-upload your previous ZIP file if needed. 
 
         {/* Responsive styles */}
         <style>{`
+          /* Base styles for desktop */
+          * {
+            box-sizing: border-box;
+          }
+
+          html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow-x: hidden;
+          }
+
+          /* Welcome overlay desktop optimization */
+          .welcome-overlay-desktop {
+            min-height: 100vh !important;
+            min-width: 100vw !important;
+          }
+
+          /* Welcome card desktop */
+          .welcome-card-desktop {
+            max-width: 600px !important;
+            width: 90% !important;
+            max-height: 90vh !important;
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
+          }
+
           /* Mobile styles */
           @media (max-width: 768px) {
             /* Welcome card responsive */
             .welcome-card-mobile {
               padding: 24px !important;
               border-radius: 16px !important;
+              max-height: 95vh !important;
             }
 
             /* Main layout - stack panels vertically */
