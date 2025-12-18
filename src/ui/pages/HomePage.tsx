@@ -392,8 +392,9 @@ const HomePage: React.FC = () => {
       alignItems: "center",
       justifyContent: "center",
       zIndex: 1000,
-      overflow: "hidden" as const,
-      padding: "20px",
+      overflowY: "auto" as const,
+      overflowX: "hidden" as const,
+      padding: "16px 20px",
       boxSizing: "border-box" as const,
     },
 
@@ -406,19 +407,20 @@ const HomePage: React.FC = () => {
       maxWidth: "700px",
       width: "100%",
       textAlign: "center" as const,
-      margin: "0 auto",
+      margin: "auto",
       boxSizing: "border-box" as const,
       display: "flex",
       flexDirection: "column" as const,
-      gap: "12px",
+      gap: "10px",
       overflow: "visible" as const,
+      maxHeight: "100%",
     },
 
     welcomeTitle: {
-      fontSize: "24px",
+      fontSize: "22px",
       fontWeight: "700",
       color: colors.text,
-      marginBottom: "8px",
+      marginBottom: "6px",
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
@@ -426,9 +428,9 @@ const HomePage: React.FC = () => {
     },
 
     welcomeSubtitle: {
-      fontSize: "14px",
+      fontSize: "13px",
       color: colors.textSecondary,
-      marginBottom: "20px",
+      marginBottom: "14px",
       lineHeight: "1.4",
     },
 
@@ -589,7 +591,7 @@ const HomePage: React.FC = () => {
           style={{
             display: "flex",
             flexDirection: "column",
-            gap: "12px",
+            gap: "10px",
             width: "100%",
             maxWidth: "600px",
             margin: "0 auto",
@@ -627,7 +629,7 @@ const HomePage: React.FC = () => {
 
         <button
           onClick={() => updateState({ showSettings: true })}
-          style={styles.secondaryButton}
+          style={{...styles.secondaryButton, marginTop: "6px"}}
           className="button-responsive"
         >
           ⚙️ Settings
@@ -1377,9 +1379,10 @@ Don't worry though - you can always re-upload your previous ZIP file if needed. 
             overflow-x: hidden;
           }
 
-          /* Welcome screen - no scroll, full page */
+          /* Welcome screen - allow scrolling if content exceeds viewport */
           .welcome-overlay-desktop {
-            overflow: hidden !important;
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
           }
 
           /* Mobile styles */

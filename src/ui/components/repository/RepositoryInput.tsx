@@ -334,7 +334,7 @@ const RepositoryInput: React.FC<RepositoryInputProps> = ({
         }
         
         .upload-tips {
-          padding: 1.5rem 2rem 2rem 2rem;
+          padding: 1rem 1.5rem 1.25rem 1.5rem;
           background: radial-gradient(circle at left, rgba(15,23,42,1), rgba(15,23,42,0.98));
           border-top: 1px solid rgba(15,23,42,1);
         }
@@ -342,9 +342,9 @@ const RepositoryInput: React.FC<RepositoryInputProps> = ({
         .tip-item {
           display: flex;
           align-items: center;
-          gap: 0.75rem;
-          margin-bottom: 0.75rem;
-          font-size: 0.85rem;
+          gap: 0.6rem;
+          margin-bottom: 0.5rem;
+          font-size: 0.8rem;
           color: #9ca3af;
         }
         
