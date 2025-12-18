@@ -79,10 +79,17 @@ app.use(cookieParser());
 
 // Configure session middleware for persistent sessions
 const isProduction = process.env.NODE_ENV === "production" || GITHUB_CALLBACK_URL.startsWith("https://");
+const sessionSecret = process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex");
+
+if (!process.env.SESSION_SECRET) {
+  console.warn("[Session] WARNING: SESSION_SECRET not set! Sessions will be invalidated on server restart.");
+  console.warn("[Session] Set SESSION_SECRET environment variable for persistent sessions.");
+}
+
 app.use(
   session({
     name: "eulonai_session",
-    secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex"),
+    secret: sessionSecret,
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -91,6 +98,7 @@ app.use(
       sameSite: isProduction ? "none" : "lax",
       maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
       path: "/",
+      domain: undefined, // Let browser set domain automatically
     },
   })
 );
@@ -134,7 +142,17 @@ declare module "express-serve-static-core" {
 }
 
 function requireSession(req: Request, res: Response): { githubAccessToken: string; githubUser: GitHubUser } | undefined {
-  if (!req.session.githubAccessToken || !req.session.githubUser) {
+  // Debug logging
+  console.log("[Session] Checking session:", {
+    hasSession: !!req.session,
+    sessionID: req.session?.id,
+    hasAccessToken: !!req.session?.githubAccessToken,
+    hasUser: !!req.session?.githubUser,
+    cookies: Object.keys(req.cookies || {}),
+  });
+
+  if (!req.session || !req.session.githubAccessToken || !req.session.githubUser) {
+    console.warn("[Session] Session validation failed - missing data");
     res.status(401).json({ error: "Not authenticated with GitHub" });
     return undefined;
   }
@@ -259,12 +277,16 @@ app.get("/auth/github/callback", async (req: Request, res: Response) => {
     req.session.githubAccessToken = accessToken;
     req.session.githubUser = githubUser;
     
-    // Save the session
+    console.log(`[OAuth] Storing session for user ${githubUser.login}, session ID: ${req.session.id}`);
+    
+    // Save the session and then redirect
     req.session.save((err: Error | null) => {
       if (err) {
         console.error("[OAuth] Failed to save session:", err);
         return res.status(500).send("Failed to create session");
       }
+
+      console.log(`[OAuth] Session saved successfully for user ${githubUser.login}`);
 
       // Clear OAuth state cookie (use same settings as when it was set)
       const isProductionForClear = process.env.NODE_ENV === "production" || GITHUB_CALLBACK_URL.startsWith("https://");
