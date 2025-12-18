@@ -376,41 +376,42 @@ const HomePage: React.FC = () => {
       gap: "8px",
     },
 
-    // Welcome screen (center overlay)
+    // Welcome screen (full page, no box)
     welcomeOverlay: {
       position: "fixed" as const,
       top: 0,
       left: 0,
       right: 0,
       bottom: 0,
-      minHeight: "100vh",
-      minWidth: "100vw",
+      height: "100vh",
+      width: "100vw",
       background:
         "radial-gradient(circle at top left, rgba(76,29,149,0.7), transparent 55%), radial-gradient(circle at bottom right, rgba(8,47,73,0.9), transparent 55%), #020617",
       display: "flex",
+      flexDirection: "column" as const,
       alignItems: "center",
       justifyContent: "center",
       zIndex: 1000,
-      overflowY: "auto" as const,
-      overflowX: "hidden" as const,
-      padding: "20px",
+      overflow: "hidden" as const,
+      padding: "40px 20px",
       boxSizing: "border-box" as const,
     },
 
     welcomeCard: {
-      background:
-        "radial-gradient(circle at top left, rgba(79,70,229,0.55), transparent 60%), radial-gradient(circle at bottom right, rgba(34,197,94,0.35), transparent 60%), rgba(15,23,42,0.95)",
-      borderRadius: "20px",
-      padding: "48px",
-      boxShadow: "0 30px 80px rgba(15,23,42,0.95)",
-      border: `1px solid rgba(148,163,184,0.4)`,
-      maxWidth: "600px",
+      background: "transparent",
+      borderRadius: "0",
+      padding: "0",
+      boxShadow: "none",
+      border: "none",
+      maxWidth: "800px",
       width: "100%",
-      maxHeight: "90vh",
-      overflowY: "auto" as const,
       textAlign: "center" as const,
-      margin: "auto",
+      margin: "0 auto",
       boxSizing: "border-box" as const,
+      display: "flex",
+      flexDirection: "column" as const,
+      gap: "24px",
+      overflow: "visible" as const,
     },
 
     welcomeTitle: {
@@ -565,8 +566,8 @@ const HomePage: React.FC = () => {
   };
 
   const renderWelcomeScreen = () => (
-    <div style={styles.welcomeOverlay} className="welcome-overlay-desktop">
-      <div style={{...styles.welcomeCard}} className="welcome-card-mobile welcome-card-desktop">
+    <div style={styles.welcomeOverlay}>
+      <div style={styles.welcomeCard}>
         <div style={{...styles.welcomeTitle}} className="welcome-title-responsive">
           <span>🔍</span>
           <span>GitNexus</span>
@@ -589,6 +590,9 @@ const HomePage: React.FC = () => {
             display: "flex",
             flexDirection: "column",
             gap: "16px",
+            width: "100%",
+            maxWidth: "600px",
+            margin: "0 auto",
           }}
         >
           <GitHubConnectCard
@@ -1373,28 +1377,16 @@ Don't worry though - you can always re-upload your previous ZIP file if needed. 
             overflow-x: hidden;
           }
 
-          /* Welcome overlay desktop optimization */
+          /* Welcome screen - no scroll, full page */
           .welcome-overlay-desktop {
-            min-height: 100vh !important;
-            min-width: 100vw !important;
-          }
-
-          /* Welcome card desktop */
-          .welcome-card-desktop {
-            max-width: 600px !important;
-            width: 90% !important;
-            max-height: 90vh !important;
-            overflow-y: auto !important;
-            overflow-x: hidden !important;
+            overflow: hidden !important;
           }
 
           /* Mobile styles */
           @media (max-width: 768px) {
-            /* Welcome card responsive */
-            .welcome-card-mobile {
-              padding: 24px !important;
-              border-radius: 16px !important;
-              max-height: 95vh !important;
+            /* Welcome screen mobile adjustments */
+            .welcome-overlay-mobile {
+              padding: 20px 16px !important;
             }
 
             /* Main layout - stack panels vertically */
