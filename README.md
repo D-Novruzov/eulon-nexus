@@ -350,38 +350,27 @@ npm run preview
 
 ### Railway deployment
 
+📖 **See [RAILWAY_DEPLOYMENT.md](RAILWAY_DEPLOYMENT.md) for complete deployment instructions.**
+
 This repository is structured to support two Railway services from the same Git repo:
 
-- Frontend: Vite React app (repo root)
-- Backend: Express GitHub integration API (`backend` folder)
+- **Frontend**: Vite React app (repo root)
+- **Backend**: Express GitHub integration API (`backend` folder)
 
-**Frontend service (Vite)**
+**Quick Setup:**
 
-Configure a Railway service with:
+1. **Frontend Service:**
+   - Root directory: `.`
+   - Build command: `npm run build`
+   - Start command: `npm start`
+   - Environment variable: `VITE_API_BASE_URL=https://your-backend.up.railway.app`
 
-- **Root directory**: `.`
-- **Install command**: `npm install`
-- **Build command**: `npm run build`
-- **Start command**: `npm start`
+2. **Backend Service:**
+   - Root directory: `backend`
+   - Start command: `npm start`
+   - Environment variables: See `backend/GITHUB_OAUTH_SETUP.md`
 
-`npm start` runs `vite preview` on `0.0.0.0:4173`, which Railway will expose.
-
-**Backend service (Express API)**
-
-Configure a second Railway service with:
-
-- **Root directory**: `backend`
-- **Install command**: `npm install`
-- **Start command**: `npm start`
-
-Expose port `4000` (Railway will usually detect this automatically).
-
-Set these environment variables on the backend service:
-
-- `GITHUB_CLIENT_ID`
-- `GITHUB_CLIENT_SECRET`
-- `GITHUB_CALLBACK_URL` (e.g. `https://your-backend-domain/auth/github/callback`)
-- `FRONTEND_ORIGIN` (e.g. `https://your-frontend-domain`)
+For detailed step-by-step instructions, environment variable configuration, and troubleshooting, see **[RAILWAY_DEPLOYMENT.md](RAILWAY_DEPLOYMENT.md)**.
 
 **Environment Variables**
 

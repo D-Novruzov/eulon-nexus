@@ -120,9 +120,11 @@ app.post("/auth/github", (req: Request, res: Response) => {
   }
 
   const state = createStateToken();
+  // In production (HTTPS), cookies must be secure
+  const isProduction = process.env.NODE_ENV === "production" || GITHUB_CALLBACK_URL.startsWith("https://");
   res.cookie(STATE_COOKIE_NAME, state, {
     httpOnly: true,
-    secure: false,
+    secure: isProduction,
     sameSite: "lax",
     path: "/",
   });
@@ -153,6 +155,12 @@ app.get("/auth/github/callback", async (req: Request, res: Response) => {
 
     const storedState = req.cookies[STATE_COOKIE_NAME];
     if (!storedState || storedState !== state) {
+      console.warn("[OAuth] State validation failed", {
+        hasStoredState: !!storedState,
+        storedState: storedState ? "present" : "missing",
+        receivedState: state ? "present" : "missing",
+        cookies: Object.keys(req.cookies),
+      });
       return res.status(400).send("Invalid OAuth state");
     }
 
@@ -204,9 +212,11 @@ app.get("/auth/github/callback", async (req: Request, res: Response) => {
 
     sessionStore.set(session);
 
+    // In production (HTTPS), cookies must be secure
+    const isProduction = process.env.NODE_ENV === "production" || GITHUB_CALLBACK_URL.startsWith("https://");
     res.cookie(SESSION_COOKIE_NAME, sessionId, {
       httpOnly: true,
-      secure: false,
+      secure: isProduction,
       sameSite: "lax",
       path: "/",
     });
