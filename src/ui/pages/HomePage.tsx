@@ -572,7 +572,7 @@ const HomePage: React.FC = () => {
       <div style={styles.welcomeCard}>
         <div style={{...styles.welcomeTitle}} className="welcome-title-responsive">
           <span>🔍</span>
-          <span>GitNexus</span>
+          <span>EulonAI</span>
         </div>
         <div style={{...styles.welcomeSubtitle}} className="welcome-subtitle-responsive">
           Transform your codebase into an interactive knowledge graph
@@ -653,7 +653,7 @@ const HomePage: React.FC = () => {
         {/* Top Navbar */}
         <div style={styles.navbar} className="navbar-responsive">
           <div style={styles.navbarContent} className="navbar-content-responsive">
-            <span>🔍 GitNexus</span>
+            <span>🔍 EulonAI</span>
             <span>•</span>
             <span>{state.graph?.nodes.length || 0} nodes</span>
             <span>•</span>

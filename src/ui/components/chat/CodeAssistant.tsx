@@ -147,7 +147,7 @@ const CodeAssistant: React.FC<CodeAssistantProps> = ({
           <span style={{ fontSize: '20px', fontWeight: '600' }}>🤖</span>
           <div>
             <div style={{ fontSize: '18px', fontWeight: '600' }}>
-              GitNexus Code Assistant
+              EulonAI Code Assistant
             </div>
             <div style={{ fontSize: '12px', color: '#666' }}>
               {getStatsText()}

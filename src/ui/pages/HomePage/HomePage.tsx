@@ -89,13 +89,13 @@ const HomePage: React.FC = () => {
     return (
       <div className="app">
         <header className="app-header">
-          <h1>🌐 GitNexus</h1>
+          <h1>🌐 EulonAI</h1>
           <p>Analyze and explore your codebase as a knowledge graph</p>
         </header>
 
         <main className="welcome-content">
           <div className="welcome-intro">
-            <h2>Welcome to GitNexus</h2>
+            <h2>Welcome to EulonAI</h2>
             <p>
               Transform your code repository into an interactive knowledge
               graph. Analyze dependencies, explore relationships, and gain deep
@@ -337,7 +337,7 @@ const HomePage: React.FC = () => {
       <div className="app">
         <header className="app-header">
           <div className="header-content">
-            <h1>🌐 GitNexus</h1>
+            <h1>🌐 EulonAI</h1>
             <div className="header-actions">
               <button onClick={handleClearResults} className="clear-button">
                 🏠 New Analysis
