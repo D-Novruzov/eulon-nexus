@@ -161,41 +161,41 @@ const RepositoryInput: React.FC<RepositoryInputProps> = ({
 
       <style>{`
         .repository-input {
-          margin-bottom: 2rem;
+          margin-bottom: 0;
           background: radial-gradient(circle at top left, rgba(79,70,229,0.45), transparent 55%),
                       radial-gradient(circle at bottom right, rgba(34,197,94,0.35), transparent 55%),
                       rgba(15,23,42,0.98);
-          border-radius: 18px;
+          border-radius: 12px;
           overflow: hidden;
-          box-shadow: 0 24px 70px rgba(15,23,42,0.9);
+          box-shadow: 0 16px 45px rgba(15,23,42,0.9);
           border: 1px solid rgba(148,163,184,0.5);
         }
         
         .upload-header {
-          padding: 1.75rem 2rem 1rem 2rem;
+          padding: 1rem 1.5rem 0.75rem 1.5rem;
           text-align: left;
           background: linear-gradient(135deg, #0f172a 0%, #1d4ed8 45%, #22c55e 100%);
           color: #e5e7eb;
         }
         
         .upload-header h3 {
-          margin: 0 0 0.4rem 0;
-          font-size: 1.3rem;
+          margin: 0 0 0.3rem 0;
+          font-size: 1.1rem;
           font-weight: 600;
         }
         
         .upload-header p {
           margin: 0;
           opacity: 0.9;
-          font-size: 0.95rem;
+          font-size: 0.85rem;
           color: #cbd5f5;
         }
         
         .zip-drop-zone {
-          margin: 1.75rem;
+          margin: 1rem 1.5rem;
           border: 2px dashed rgba(148,163,184,0.7);
-          border-radius: 14px;
-          padding: 2.75rem 2rem;
+          border-radius: 10px;
+          padding: 1.5rem 1.5rem;
           text-align: center;
           cursor: pointer;
           transition: all 0.25s ease;
@@ -227,11 +227,11 @@ const RepositoryInput: React.FC<RepositoryInputProps> = ({
           display: flex;
           flex-direction: column;
           align-items: center;
-          gap: 1.5rem;
+          gap: 1rem;
         }
         
         .drop-zone-icon {
-          font-size: 4rem;
+          font-size: 3rem;
           opacity: 0.7;
           transition: all 0.3s ease;
         }
@@ -247,26 +247,26 @@ const RepositoryInput: React.FC<RepositoryInputProps> = ({
         }
         
         .drop-zone-primary {
-          font-size: 1.1rem;
+          font-size: 0.95rem;
           font-weight: 600;
           color: #e5e7eb;
-          margin-bottom: 0.4rem;
+          margin-bottom: 0.3rem;
         }
         
         .drop-zone-secondary {
-          font-size: 0.95rem;
+          font-size: 0.85rem;
           color: #9ca3af;
         }
         
         .browse-button {
-          padding: 0.75rem 2.2rem;
+          padding: 0.6rem 1.8rem;
           background: linear-gradient(135deg, #6366f1 0%, #22d3ee 50%, #22c55e 100%);
           color: #f9fafb;
           border-radius: 999px;
           font-weight: 600;
-          font-size: 0.95rem;
+          font-size: 0.85rem;
           transition: all 0.2s ease;
-          box-shadow: 0 14px 40px rgba(56,189,248,0.55);
+          box-shadow: 0 10px 30px rgba(56,189,248,0.55);
         }
         
         .zip-drop-zone:hover .browse-button {

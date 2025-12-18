@@ -193,18 +193,18 @@ const GitHubConnectCard: React.FC<GitHubConnectCardProps> = ({
           background: radial-gradient(circle at top left, rgba(139, 92, 246, 0.35), transparent),
                       radial-gradient(circle at bottom right, rgba(16, 185, 129, 0.25), transparent),
                       #020617;
-          border-radius: 18px;
-          padding: 1.5rem 1.75rem;
+          border-radius: 12px;
+          padding: 1rem 1.25rem;
           border: 1px solid rgba(148, 163, 184, 0.35);
-          box-shadow: 0 18px 45px rgba(15, 23, 42, 0.9);
+          box-shadow: 0 12px 30px rgba(15, 23, 42, 0.9);
           color: #e5e7eb;
         }
 
         .github-card-header {
           display: flex;
           align-items: center;
-          gap: 1rem;
-          margin-bottom: 1rem;
+          gap: 0.75rem;
+          margin-bottom: 0.75rem;
         }
 
         .github-logo-circle {
@@ -225,33 +225,33 @@ const GitHubConnectCard: React.FC<GitHubConnectCardProps> = ({
 
         .github-title {
           margin: 0;
-          font-size: 1.15rem;
+          font-size: 1rem;
           font-weight: 600;
           color: #f9fafb;
         }
 
         .github-subtitle {
-          margin: 0.15rem 0 0;
-          font-size: 0.9rem;
+          margin: 0.1rem 0 0;
+          font-size: 0.8rem;
           color: #9ca3af;
         }
 
         .github-connect-button {
-          margin-top: 0.75rem;
+          margin-top: 0.5rem;
           width: 100%;
           border-radius: 999px;
-          padding: 0.65rem 1rem;
+          padding: 0.5rem 0.875rem;
           border: none;
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          gap: 0.5rem;
+          gap: 0.4rem;
           background: linear-gradient(135deg, #0f766e, #22c55e);
           color: #ecfdf5;
           font-weight: 600;
-          font-size: 0.9rem;
+          font-size: 0.85rem;
           cursor: pointer;
-          box-shadow: 0 12px 35px rgba(34, 197, 94, 0.45);
+          box-shadow: 0 8px 25px rgba(34, 197, 94, 0.45);
           transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
         }
 
