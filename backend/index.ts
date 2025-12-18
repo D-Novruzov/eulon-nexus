@@ -16,13 +16,11 @@ const rootEnvPath = join(__dirname, "..", ".env");
 
 // Try backend/.env first, then root/.env as fallback
 let envResult = config({ path: backendEnvPath });
-let envLoadedFrom = backendEnvPath;
 
 if (envResult.error) {
   // Try root directory as fallback
   envResult = config({ path: rootEnvPath });
   if (!envResult.error) {
-    envLoadedFrom = rootEnvPath;
     console.log(`[dotenv] Loaded .env file from root directory: ${rootEnvPath}`);
     console.warn(`[dotenv] Note: Consider moving .env to backend/.env for better organization`);
   } else {
@@ -83,6 +81,20 @@ app.use(cookieParser());
 const SESSION_COOKIE_NAME = "eulonai_session";
 const STATE_COOKIE_NAME = "github_oauth_state";
 
+// Store OAuth states server-side with expiration (5 minutes)
+const oauthStates = new Map<string, { createdAt: number; frontendOrigin: string }>();
+const STATE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
+
+// Clean up expired states periodically
+setInterval(() => {
+  const now = Date.now();
+  for (const [state, data] of oauthStates.entries()) {
+    if (now - data.createdAt > STATE_EXPIRY_MS) {
+      oauthStates.delete(state);
+    }
+  }
+}, 60000); // Clean up every minute
+
 function createSessionId(): string {
   return crypto.randomBytes(16).toString("hex");
 }
@@ -120,12 +132,19 @@ app.post("/auth/github", (req: Request, res: Response) => {
   }
 
   const state = createStateToken();
-  // In production (HTTPS), cookies must be secure
+  // Store state server-side instead of relying on cookies
+  oauthStates.set(state, {
+    createdAt: Date.now(),
+    frontendOrigin: FRONTEND_ORIGIN,
+  });
+  
+  // Also set cookie as backup (but we'll primarily use server-side storage)
+  // In production (HTTPS), use secure cookies with sameSite: "none" for cross-site redirects
   const isProduction = process.env.NODE_ENV === "production" || GITHUB_CALLBACK_URL.startsWith("https://");
   res.cookie(STATE_COOKIE_NAME, state, {
     httpOnly: true,
-    secure: isProduction,
-    sameSite: "lax",
+    secure: isProduction, // Must be true when sameSite is "none"
+    sameSite: isProduction ? "none" : "lax", // "none" for cross-site, "lax" for same-site
     path: "/",
   });
 
@@ -153,15 +172,26 @@ app.get("/auth/github/callback", async (req: Request, res: Response) => {
       return res.status(400).send("Missing OAuth parameters");
     }
 
-    const storedState = req.cookies[STATE_COOKIE_NAME];
-    if (!storedState || storedState !== state) {
+    // Check server-side state storage first (more reliable)
+    const storedStateData = oauthStates.get(state);
+    const cookieState = req.cookies[STATE_COOKIE_NAME];
+    
+    // Validate state - check server-side storage or cookie
+    const isValidState = storedStateData || (cookieState && cookieState === state);
+    
+    if (!isValidState) {
       console.warn("[OAuth] State validation failed", {
-        hasStoredState: !!storedState,
-        storedState: storedState ? "present" : "missing",
+        hasServerState: !!storedStateData,
+        hasCookieState: !!cookieState,
         receivedState: state ? "present" : "missing",
         cookies: Object.keys(req.cookies),
       });
       return res.status(400).send("Invalid OAuth state");
+    }
+    
+    // Clean up the state after validation
+    if (storedStateData) {
+      oauthStates.delete(state);
     }
 
     if (!GITHUB_CLIENT_ID || !GITHUB_CLIENT_SECRET) {
