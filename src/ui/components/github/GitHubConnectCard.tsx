@@ -1,5 +1,4 @@
-// @ts-nocheck
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 
 interface GitHubConnectCardProps {
   onConnected: () => void;
@@ -27,39 +26,79 @@ const GitHubConnectCard: React.FC<GitHubConnectCardProps> = ({
   );
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const url = new URL(window.location.href);
-    if (url.searchParams.get("github_connected") === "true") {
-      void refreshStatus();
-      url.searchParams.delete("github_connected");
-      window.history.replaceState({}, document.title, url.toString());
-    } else {
-      void refreshStatus();
-    }
-  }, []);
-
-  const refreshStatus = async () => {
+  const refreshStatus = useCallback(async () => {
     try {
       setError(null);
       const res = await fetch(`${API_BASE_URL}/integrations/github/me`, {
         credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
       });
+      
       if (!res.ok) {
-        setIsConnected(false);
-        setUser(undefined);
-        return;
+        if (res.status === 401) {
+          // Not authenticated - this is expected if not connected
+          setIsConnected(false);
+          setUser(undefined);
+          return;
+        }
+        // Other errors
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       }
+      
       const data = (await res.json()) as GitHubMeResponse;
       if (data.connected) {
         setIsConnected(true);
         setUser(data.user);
         onConnected();
+      } else {
+        setIsConnected(false);
+        setUser(undefined);
       }
     } catch (e) {
       console.error("Failed to refresh GitHub auth status", e);
-      setError("Unable to verify GitHub connection");
+      // Only set error if it's not a 401 (which is expected when not connected)
+      if (e instanceof Error && !e.message.includes("401")) {
+        setError("Unable to verify GitHub connection");
+      }
+      setIsConnected(false);
+      setUser(undefined);
     }
-  };
+  }, [onConnected]);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("github_connected") === "true") {
+      // After OAuth callback, wait a bit for session to be fully established
+      // then retry with exponential backoff
+      const retryWithBackoff = async (attempt = 0) => {
+        const maxAttempts = 3;
+        const delay = Math.min(1000 * Math.pow(2, attempt), 3000); // Max 3 seconds
+        
+        if (attempt > 0) {
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+        
+        try {
+          await refreshStatus();
+        } catch (e) {
+          if (attempt < maxAttempts) {
+            console.log(`Retrying GitHub status check (attempt ${attempt + 1}/${maxAttempts})...`);
+            await retryWithBackoff(attempt + 1);
+          } else {
+            console.error("Failed to refresh GitHub auth status after retries", e);
+          }
+        }
+      };
+      
+      void retryWithBackoff();
+      url.searchParams.delete("github_connected");
+      window.history.replaceState({}, document.title, url.toString());
+    } else {
+      void refreshStatus();
+    }
+  }, [refreshStatus]);
 
   const handleConnect = async () => {
     try {

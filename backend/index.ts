@@ -54,15 +54,18 @@ app.use(
   session({
     name: "eulonai_session",
     secret: sessionSecret,
-    resave: true,
+    resave: false, // Changed to false to prevent race conditions
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
       secure: isProduction,
       sameSite: isProduction ? "none" : "lax",
-      maxAge: 30 * 24 * 60 * 60 * 1000,
+      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
       path: "/",
+      // Don't set domain - let browser handle it for cross-origin
     },
+    // Add rolling session to extend expiry on activity
+    rolling: true,
   })
 );
 
@@ -101,8 +104,21 @@ declare module "express-serve-static-core" {
 }
 
 function requireSession(req: Request, res: Response): { githubAccessToken: string; githubUser: GitHubUser } | undefined {
-  if (!req.session?.githubAccessToken || !req.session?.githubUser) {
-    res.status(401).json({ error: "Not authenticated with GitHub" });
+  // Check if session exists
+  if (!req.session) {
+    console.error("No session found in request");
+    res.status(401).json({ error: "Not authenticated with GitHub", reason: "no_session" });
+    return undefined;
+  }
+
+  // Check if session has required data
+  if (!req.session.githubAccessToken || !req.session.githubUser) {
+    console.error("Session missing GitHub data:", {
+      hasToken: !!req.session.githubAccessToken,
+      hasUser: !!req.session.githubUser,
+      sessionId: req.sessionID,
+    });
+    res.status(401).json({ error: "Not authenticated with GitHub", reason: "missing_github_data" });
     return undefined;
   }
 
@@ -191,16 +207,26 @@ app.get("/auth/github/callback", async (req: Request, res: Response) => {
     req.session.githubAccessToken = accessToken;
     req.session.githubUser = userResponse.data;
     
-    req.session.save((err) => {
-      if (err) {
-        console.error("Failed to save session:", err);
-        return res.status(500).send("Failed to create session");
-      }
-
-      const redirectUrl = new URL(FRONTEND_ORIGIN);
-      redirectUrl.searchParams.set("github_connected", "true");
-      res.redirect(302, redirectUrl.toString());
+    // Ensure session is saved before redirecting
+    await new Promise<void>((resolve, reject) => {
+      req.session.save((err) => {
+        if (err) {
+          console.error("Failed to save session:", err);
+          reject(err);
+        } else {
+          console.log("Session saved successfully:", {
+            sessionId: req.sessionID,
+            hasToken: !!req.session.githubAccessToken,
+            hasUser: !!req.session.githubUser,
+          });
+          resolve();
+        }
+      });
     });
+
+    const redirectUrl = new URL(FRONTEND_ORIGIN);
+    redirectUrl.searchParams.set("github_connected", "true");
+    res.redirect(302, redirectUrl.toString());
   } catch (error) {
     console.error("GitHub OAuth callback error:", error);
     res.status(500).send("GitHub OAuth failed");
@@ -212,6 +238,21 @@ app.get("/auth/github/callback", async (req: Request, res: Response) => {
  * Simple endpoint so the frontend can check whether GitHub is connected.
  */
 app.get("/integrations/github/me", (req: Request, res: Response) => {
+  // Add logging for debugging
+  const hasSession = !!req.session;
+  const hasToken = !!req.session?.githubAccessToken;
+  const hasUser = !!req.session?.githubUser;
+  
+  if (!hasSession || !hasToken || !hasUser) {
+    console.log("Session check failed:", {
+      hasSession,
+      hasToken,
+      hasUser,
+      sessionId: req.sessionID,
+      cookie: req.headers.cookie ? "present" : "missing",
+    });
+  }
+
   const session = requireSession(req, res);
   if (!session) return;
 

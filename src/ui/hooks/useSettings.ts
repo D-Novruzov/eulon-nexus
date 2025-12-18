@@ -239,17 +239,6 @@ export const useSettings = (): UseSettingsReturn => {
       }
     })();
     
-    console.log('🔑 getCurrentProviderApiKey:', {
-      provider: settings.llmProvider,
-      returnedKey: result ? `${result.substring(0, 6)}...` : 'empty',
-      allKeys: {
-        openai: settings.openaiApiKey ? `${settings.openaiApiKey.substring(0, 6)}...` : 'empty',
-        azure: settings.azureApiKey ? `${settings.azureApiKey.substring(0, 6)}...` : 'empty',
-        anthropic: settings.anthropicApiKey ? `${settings.anthropicApiKey.substring(0, 6)}...` : 'empty',
-        gemini: settings.geminiApiKey ? `${settings.geminiApiKey.substring(0, 6)}...` : 'empty'
-      }
-    });
-    
     return result;
   }, [settings.llmProvider, settings.openaiApiKey, settings.azureApiKey, settings.anthropicApiKey, settings.geminiApiKey]);
 
