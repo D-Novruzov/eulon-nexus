@@ -551,12 +551,12 @@ const HomePage: React.FC = () => {
 
   const renderWelcomeScreen = () => (
     <div style={styles.welcomeOverlay}>
-      <div style={styles.welcomeCard}>
-        <div style={styles.welcomeTitle}>
+      <div style={{...styles.welcomeCard}} className="welcome-card-mobile">
+        <div style={{...styles.welcomeTitle}} className="welcome-title-responsive">
           <span>🔍</span>
           <span>GitNexus</span>
         </div>
-        <div style={styles.welcomeSubtitle}>
+        <div style={{...styles.welcomeSubtitle}} className="welcome-subtitle-responsive">
           Transform your codebase into an interactive knowledge graph
         </div>
 
@@ -591,6 +591,7 @@ const HomePage: React.FC = () => {
               setShowGitHubRepoPicker(true);
             }}
             style={styles.secondaryButton}
+            className="button-responsive"
           >
             Import from GitHub
           </button>
@@ -608,6 +609,7 @@ const HomePage: React.FC = () => {
         <button
           onClick={() => updateState({ showSettings: true })}
           style={styles.secondaryButton}
+          className="button-responsive"
         >
           ⚙️ Settings
         </button>
@@ -628,8 +630,8 @@ const HomePage: React.FC = () => {
     return (
       <>
         {/* Top Navbar */}
-        <div style={styles.navbar}>
-          <div style={styles.navbarContent}>
+        <div style={styles.navbar} className="navbar-responsive">
+          <div style={styles.navbarContent} className="navbar-content-responsive">
             <span>🔍 GitNexus</span>
             <span>•</span>
             <span>{state.graph?.nodes.length || 0} nodes</span>
@@ -645,6 +647,7 @@ const HomePage: React.FC = () => {
               display: "flex",
               gap: "12px",
             }}
+            className="navbar-buttons-responsive"
           >
             <button
               onClick={() => updateState({ showStats: !state.showStats })}
@@ -655,6 +658,7 @@ const HomePage: React.FC = () => {
                   : colors.surfaceWarm,
                 color: state.showStats ? "#fff" : colors.text,
               }}
+              className="navbar-button-responsive"
             >
               <span>📊</span>
               Stats
@@ -669,11 +673,16 @@ const HomePage: React.FC = () => {
                 opacity: state.graph ? 1 : 0.6,
               }}
               disabled={!state.graph}
+              className="navbar-button-responsive"
             >
               <span>📥</span>
               Download KG
             </button>
-            <button onClick={handleNewProject} style={styles.navbarButton}>
+            <button 
+              onClick={handleNewProject} 
+              style={styles.navbarButton}
+              className="navbar-button-responsive"
+            >
               <span>🔄</span>
               New Project
             </button>
@@ -696,6 +705,7 @@ const HomePage: React.FC = () => {
                 gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
                 gap: "24px",
               }}
+              className="stats-grid-responsive"
             >
               {/* Node Statistics */}
               <div>
@@ -855,9 +865,9 @@ const HomePage: React.FC = () => {
         )}
 
         {/* Main Layout */}
-        <div style={styles.mainLayout}>
+        <div style={styles.mainLayout} className="main-layout-responsive">
           {/* Left Panel - Knowledge Graph */}
-          <div style={styles.leftPanel}>
+          <div style={styles.leftPanel} className="left-panel-responsive">
             <GraphExplorer
               graph={state.graph!}
               isLoading={state.isLoading}
@@ -867,7 +877,7 @@ const HomePage: React.FC = () => {
           </div>
 
           {/* Right Panel - Chat */}
-          <div style={styles.rightPanel}>
+          <div style={styles.rightPanel} className="right-panel-responsive">
             {isApiKeyValid ? (
               <ChatInterface
                 graph={state.graph!}
@@ -1332,6 +1342,117 @@ Don't worry though - you can always re-upload your previous ZIP file if needed. 
           onClose={() => setShowGitHubRepoPicker(false)}
           onImport={handleGitHubReposImport}
         />
+
+        {/* Responsive styles */}
+        <style>{`
+          /* Mobile styles */
+          @media (max-width: 768px) {
+            /* Welcome card responsive */
+            .welcome-card-mobile {
+              padding: 24px !important;
+              border-radius: 16px !important;
+            }
+
+            /* Main layout - stack panels vertically */
+            .main-layout-responsive {
+              flex-direction: column !important;
+            }
+
+            .left-panel-responsive {
+              flex: 0 0 60% !important;
+              min-height: 400px;
+            }
+
+            .right-panel-responsive {
+              flex: 0 0 40% !important;
+              min-height: 300px;
+            }
+
+            /* Navbar responsive */
+            .navbar-responsive {
+              padding: 8px 16px !important;
+              flex-wrap: wrap;
+            }
+
+            .navbar-content-responsive {
+              font-size: 12px !important;
+              gap: 8px !important;
+              flex-wrap: wrap;
+            }
+
+            .navbar-buttons-responsive {
+              position: static !important;
+              margin-top: 8px;
+              width: 100%;
+              justify-content: center;
+            }
+
+            .navbar-button-responsive {
+              padding: 6px 12px !important;
+              font-size: 12px !important;
+            }
+
+            /* Welcome title responsive */
+            .welcome-title-responsive {
+              font-size: 24px !important;
+              gap: 8px !important;
+            }
+
+            .welcome-subtitle-responsive {
+              font-size: 16px !important;
+              margin-bottom: 24px !important;
+            }
+
+            /* Buttons responsive */
+            .button-responsive {
+              padding: 12px 20px !important;
+              font-size: 14px !important;
+            }
+
+            /* Stats panel responsive */
+            .stats-grid-responsive {
+              grid-template-columns: 1fr !important;
+              gap: 16px !important;
+            }
+          }
+
+          /* Small mobile styles */
+          @media (max-width: 480px) {
+            .welcome-card-mobile {
+              padding: 20px !important;
+              border-radius: 12px !important;
+            }
+
+            .welcome-title-responsive {
+              font-size: 20px !important;
+            }
+
+            .welcome-subtitle-responsive {
+              font-size: 14px !important;
+              margin-bottom: 20px !important;
+            }
+
+            .button-responsive {
+              padding: 10px 16px !important;
+              font-size: 13px !important;
+            }
+
+            .navbar-content-responsive {
+              font-size: 11px !important;
+            }
+          }
+
+          /* Tablet styles */
+          @media (min-width: 769px) and (max-width: 1024px) {
+            .left-panel-responsive {
+              flex: 0 0 65% !important;
+            }
+
+            .right-panel-responsive {
+              flex: 0 0 35% !important;
+            }
+          }
+        `}</style>
       </div>
     </ErrorBoundary>
   );

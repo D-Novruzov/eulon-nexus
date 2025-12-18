@@ -322,6 +322,71 @@ const GitHubConnectCard: React.FC<GitHubConnectCardProps> = ({
           font-size: 0.8rem;
           color: #fecaca;
         }
+
+        /* Responsive styles */
+        @media (max-width: 768px) {
+          .github-card {
+            padding: 1rem 1.25rem;
+            border-radius: 12px;
+          }
+
+          .github-card-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.75rem;
+          }
+
+          .github-logo-circle {
+            width: 36px;
+            height: 36px;
+          }
+
+          .github-title {
+            font-size: 1rem;
+          }
+
+          .github-subtitle {
+            font-size: 0.85rem;
+          }
+
+          .github-connect-button {
+            padding: 0.6rem 0.9rem;
+            font-size: 0.85rem;
+          }
+
+          .github-connected {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.5rem;
+          }
+
+          .github-user {
+            width: 100%;
+          }
+
+          .github-pill {
+            align-self: flex-start;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .github-card {
+            padding: 0.875rem 1rem;
+          }
+
+          .github-title {
+            font-size: 0.95rem;
+          }
+
+          .github-subtitle {
+            font-size: 0.8rem;
+          }
+
+          .github-connect-button {
+            padding: 0.55rem 0.8rem;
+            font-size: 0.8rem;
+          }
+        }
       `}</style>
     </div>
   );
