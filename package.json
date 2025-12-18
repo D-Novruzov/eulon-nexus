@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "npm run compile-queries && vite",
     "server": "cd backend && npm run dev",
-    "build": "npm run compile-queries && tsc -b && vite build",
+    "build": "npm run compile-queries && vite build",
     "compile-queries": "node scripts/compile-queries.js",
     "lint": "eslint .",
     "preview": "vite preview --host 0.0.0.0 --port 4173",
