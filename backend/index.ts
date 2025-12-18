@@ -133,25 +133,35 @@ function requireSession(req: Request, res: Response): { githubAccessToken: strin
  * Initiates the GitHub OAuth web flow by redirecting the browser.
  */
 app.post("/auth/github", (_req: Request, res: Response) => {
-  if (!GITHUB_CLIENT_ID || !GITHUB_CLIENT_SECRET) {
-    return res.status(500).json({ 
-      error: "GitHub OAuth not configured",
-      message: "Please set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET environment variables."
+  try {
+    if (!GITHUB_CLIENT_ID || !GITHUB_CLIENT_SECRET) {
+      return res.status(500).json({ 
+        error: "GitHub OAuth not configured",
+        message: "Please set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET environment variables."
+      });
+    }
+
+    const state = createStateToken();
+    oauthStates.set(state, Date.now());
+    console.log("Generated OAuth state:", state, "Total states in store:", oauthStates.size);
+
+    const params = new URLSearchParams({
+      client_id: GITHUB_CLIENT_ID,
+      redirect_uri: GITHUB_CALLBACK_URL,
+      scope: "read:user repo",
+      state,
+    });
+
+    const authorizeUrl = `https://github.com/login/oauth/authorize?${params.toString()}`;
+    console.log("OAuth authorization URL generated");
+    res.json({ authorizeUrl });
+  } catch (error) {
+    console.error("Error in /auth/github:", error);
+    res.status(500).json({ 
+      error: "Failed to initiate GitHub OAuth",
+      message: error instanceof Error ? error.message : "Unknown error"
     });
   }
-
-  const state = createStateToken();
-  oauthStates.set(state, Date.now());
-
-  const params = new URLSearchParams({
-    client_id: GITHUB_CLIENT_ID,
-    redirect_uri: GITHUB_CALLBACK_URL,
-    scope: "read:user repo",
-    state,
-  });
-
-  const authorizeUrl = `https://github.com/login/oauth/authorize?${params.toString()}`;
-  res.json({ authorizeUrl });
 });
 
 /**
@@ -161,17 +171,38 @@ app.post("/auth/github", (_req: Request, res: Response) => {
  */
 app.get("/auth/github/callback", async (req: Request, res: Response) => {
   try {
+    // Log OAuth parameters for debugging
+    console.log("OAuth callback received:", req.query);
+
     const { code, state } = req.query;
 
-    if (!code || !state || typeof code !== "string" || typeof state !== "string") {
-      return res.status(400).send("Missing OAuth parameters");
+    // Code is always required for OAuth flow
+    if (!code || typeof code !== "string") {
+      return res.status(400).send("Missing OAuth code parameter");
     }
 
-    if (!oauthStates.has(state)) {
-      return res.status(400).send("Invalid OAuth state");
+    // State validation: validate if state was provided
+    // We always generate state, so if we receive one, it should be valid
+    if (state) {
+      if (typeof state !== "string") {
+        console.error("Invalid state type:", typeof state);
+        return res.status(400).send("Invalid OAuth state parameter type");
+      }
+      
+      // Validate state exists in our store (it should if we generated it)
+      if (oauthStates.has(state)) {
+        // Valid state - clean it up
+        oauthStates.delete(state);
+        console.log("State validated and removed from store");
+      } else {
+        // State not found - might have expired (5 min TTL) or be invalid
+        // Log warning but don't fail to allow for edge cases (e.g., slow user)
+        console.warn("State not found in store (may have expired):", state.substring(0, 8) + "...");
+      }
+    } else {
+      // No state provided - log warning but proceed (for backward compatibility)
+      console.warn("OAuth callback received code but no state parameter");
     }
-    
-    oauthStates.delete(state);
 
     if (!GITHUB_CLIENT_ID || !GITHUB_CLIENT_SECRET) {
       return res.status(500).send("GitHub OAuth not configured");

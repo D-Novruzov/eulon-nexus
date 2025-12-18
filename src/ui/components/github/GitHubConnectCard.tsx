@@ -105,6 +105,8 @@ const GitHubConnectCard: React.FC<GitHubConnectCardProps> = ({
       setIsConnecting(true);
       setError(null);
 
+      console.log("Initiating GitHub OAuth flow...", { apiBaseUrl: API_BASE_URL });
+      
       const res = await fetch(`${API_BASE_URL}/auth/github`, {
         method: "POST",
         credentials: "include",
@@ -113,16 +115,27 @@ const GitHubConnectCard: React.FC<GitHubConnectCardProps> = ({
         },
       });
 
+      console.log("GitHub OAuth response:", { status: res.status, ok: res.ok });
+
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || "Failed to start GitHub OAuth flow");
+        const errorMessage = body.error || body.message || `HTTP ${res.status}: ${res.statusText}`;
+        console.error("GitHub OAuth failed:", { status: res.status, body, errorMessage });
+        throw new Error(errorMessage);
       }
 
       const data = (await res.json()) as { authorizeUrl: string };
+      console.log("Redirecting to GitHub authorization URL");
+      
+      if (!data.authorizeUrl) {
+        throw new Error("No authorization URL received from server");
+      }
+      
       window.location.href = data.authorizeUrl;
     } catch (e) {
       console.error("GitHub connect failed", e);
-      setError(e instanceof Error ? e.message : "GitHub connection failed");
+      const errorMessage = e instanceof Error ? e.message : "GitHub connection failed";
+      setError(errorMessage);
       setIsConnecting(false);
     }
   };
