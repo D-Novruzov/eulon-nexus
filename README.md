@@ -233,6 +233,16 @@ flowchart TD
 
 Open http://localhost:5173
 
+To run the backend locally:
+
+```bash
+   cd backend
+   npm install
+   npm run dev
+```
+
+The backend will listen on port 4000 by default. Ensure `FRONTEND_ORIGIN` in the backend environment matches your frontend URL.
+
 **Configuration**
 
 - GitHub token (optional): Increases rate limit to 5,000/hour
@@ -337,6 +347,41 @@ graph TD
 npm run build
 npm run preview
 ```
+
+### Railway deployment
+
+This repository is structured to support two Railway services from the same Git repo:
+
+- Frontend: Vite React app (repo root)
+- Backend: Express GitHub integration API (`backend` folder)
+
+**Frontend service (Vite)**
+
+Configure a Railway service with:
+
+- **Root directory**: `.`
+- **Install command**: `npm install`
+- **Build command**: `npm run build`
+- **Start command**: `npm start`
+
+`npm start` runs `vite preview` on `0.0.0.0:4173`, which Railway will expose.
+
+**Backend service (Express API)**
+
+Configure a second Railway service with:
+
+- **Root directory**: `backend`
+- **Install command**: `npm install`
+- **Start command**: `npm start`
+
+Expose port `4000` (Railway will usually detect this automatically).
+
+Set these environment variables on the backend service:
+
+- `GITHUB_CLIENT_ID`
+- `GITHUB_CLIENT_SECRET`
+- `GITHUB_CALLBACK_URL` (e.g. `https://your-backend-domain/auth/github/callback`)
+- `FRONTEND_ORIGIN` (e.g. `https://your-frontend-domain`)
 
 **Environment Variables**
 

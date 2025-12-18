@@ -1,9 +1,40 @@
+import { config } from "dotenv";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 import express, { type Request, type Response } from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import crypto from "crypto";
 import axios from "axios";
 import { sessionStore, type SessionData } from "./session-store.ts";
+
+// Load .env file - check backend directory first, then root as fallback
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const backendEnvPath = join(__dirname, ".env");
+const rootEnvPath = join(__dirname, "..", ".env");
+
+// Try backend/.env first, then root/.env as fallback
+let envResult = config({ path: backendEnvPath });
+let envLoadedFrom = backendEnvPath;
+
+if (envResult.error) {
+  // Try root directory as fallback
+  envResult = config({ path: rootEnvPath });
+  if (!envResult.error) {
+    envLoadedFrom = rootEnvPath;
+    console.log(`[dotenv] Loaded .env file from root directory: ${rootEnvPath}`);
+    console.warn(`[dotenv] Note: Consider moving .env to backend/.env for better organization`);
+  } else {
+    console.warn(`[dotenv] Warning: Could not load .env file from either location`);
+    console.warn(`[dotenv] Tried: ${backendEnvPath}`);
+    console.warn(`[dotenv] Tried: ${rootEnvPath}`);
+    console.warn(`[dotenv] Error: ${envResult.error.message}`);
+    console.warn(`[dotenv] Make sure backend/.env file exists with your GitHub OAuth credentials`);
+  }
+} else {
+  console.log(`[dotenv] Loaded .env file from backend directory: ${backendEnvPath}`);
+}
 import type {
   GitHubRepo,
   GitHubUser,
@@ -20,14 +51,21 @@ const port = process.env.PORT ? Number(process.env.PORT) : 4000;
 const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID;
 const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET;
 const GITHUB_CALLBACK_URL =
-  process.env.GITHUB_CALLBACK_URL ||
-  "http://localhost:4000/auth/github/callback";
+  process.env.GITHUB_CALLBACK_URL || "http://localhost:4000/auth/github/callback";
 
+// Debug: Log environment variable status (without exposing secrets)
 if (!GITHUB_CLIENT_ID || !GITHUB_CLIENT_SECRET) {
   // eslint-disable-next-line no-console
   console.warn(
-    "[GitHub OAuth] GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET are not set. OAuth will not work until they are configured."
+    "[GitHub OAuth] GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET are not set. OAuth will not work until they are configured.",
   );
+  // eslint-disable-next-line no-console
+  console.log("[Debug] GITHUB_CLIENT_ID exists:", !!GITHUB_CLIENT_ID);
+  // eslint-disable-next-line no-console
+  console.log("[Debug] GITHUB_CLIENT_SECRET exists:", !!GITHUB_CLIENT_SECRET);
+} else {
+  // eslint-disable-next-line no-console
+  console.log("[GitHub OAuth] Configuration loaded successfully");
 }
 
 // EulonAI frontend origin; adjust if needed.
@@ -37,7 +75,7 @@ app.use(
   cors({
     origin: FRONTEND_ORIGIN,
     credentials: true,
-  })
+  }),
 );
 app.use(express.json());
 app.use(cookieParser());
@@ -74,8 +112,11 @@ function requireSession(req: Request, res: Response): SessionData | undefined {
  * Initiates the GitHub OAuth web flow by redirecting the browser.
  */
 app.post("/auth/github", (req: Request, res: Response) => {
-  if (!GITHUB_CLIENT_ID) {
-    return res.status(500).json({ error: "GitHub OAuth not configured" });
+  if (!GITHUB_CLIENT_ID || !GITHUB_CLIENT_SECRET) {
+    return res.status(500).json({ 
+      error: "GitHub OAuth not configured",
+      message: "Please set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET environment variables. See backend/GITHUB_OAUTH_SETUP.md for instructions."
+    });
   }
 
   const state = createStateToken();
@@ -106,12 +147,7 @@ app.get("/auth/github/callback", async (req: Request, res: Response) => {
   try {
     const { code, state } = req.query;
 
-    if (
-      !code ||
-      !state ||
-      typeof code !== "string" ||
-      typeof state !== "string"
-    ) {
+    if (!code || !state || typeof code !== "string" || typeof state !== "string") {
       return res.status(400).send("Missing OAuth parameters");
     }
 
@@ -137,7 +173,7 @@ app.get("/auth/github/callback", async (req: Request, res: Response) => {
         headers: {
           Accept: "application/json",
         },
-      }
+      },
     );
 
     const accessToken = tokenResponse.data.access_token as string | undefined;
@@ -146,15 +182,12 @@ app.get("/auth/github/callback", async (req: Request, res: Response) => {
     }
 
     // Fetch GitHub user
-    const userResponse = await axios.get<GitHubUser>(
-      "https://api.github.com/user",
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          Accept: "application/vnd.github.v3+json",
-        },
-      }
-    );
+    const userResponse = await axios.get<GitHubUser>("https://api.github.com/user", {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/vnd.github.v3+json",
+      },
+    });
 
     const githubUser = userResponse.data;
 
@@ -231,7 +264,7 @@ app.get("/integrations/github/repos", async (req: Request, res: Response) => {
           visibility: "all",
           affiliation: "owner,collaborator,organization_member",
         },
-      }
+      },
     );
 
     const repos = response.data;
@@ -288,7 +321,7 @@ app.post("/integrations/github/import", async (req: Request, res: Response) => {
               Authorization: `Bearer ${session.githubAccessToken}`,
               Accept: "application/vnd.github.v3+json",
             },
-          }
+          },
         );
 
         const commitHash = commitResponse.data?.sha as string | undefined;
@@ -305,7 +338,7 @@ app.post("/integrations/github/import", async (req: Request, res: Response) => {
         // eslint-disable-next-line no-console
         console.error(
           `Failed to resolve HEAD for ${repo.owner}/${repo.name}@${branch}`,
-          innerError
+          innerError,
         );
       }
     }
@@ -321,9 +354,29 @@ app.post("/integrations/github/import", async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * GET /health
+ * Health check endpoint to verify server and configuration status
+ */
+app.get("/health", (req: Request, res: Response) => {
+  res.json({
+    status: "ok",
+    githubOAuthConfigured: !!(GITHUB_CLIENT_ID && GITHUB_CLIENT_SECRET),
+    hasClientId: !!GITHUB_CLIENT_ID,
+    hasClientSecret: !!GITHUB_CLIENT_SECRET,
+    callbackUrl: GITHUB_CALLBACK_URL,
+    frontendOrigin: FRONTEND_ORIGIN,
+    port,
+  });
+});
+
 app.listen(port, () => {
   // eslint-disable-next-line no-console
   console.log(
-    `EulonAI GitHub integration server listening on http://localhost:${port}`
+    `EulonAI GitHub integration server listening on http://localhost:${port}`,
   );
+  // eslint-disable-next-line no-console
+  console.log(`Health check: http://localhost:${port}/health`);
 });
+
+
