@@ -95,6 +95,26 @@ app.use((req: Request, _res: Response, next) => {
 const oauthStates = new Map<string, number>();
 const STATE_EXPIRY_MS = 5 * 60 * 1000;
 
+// Map to store temporary session tokens with full session data
+// These are used when cookies don't work due to cross-origin restrictions
+interface SessionTokenData {
+  githubAccessToken: string;
+  githubUser: GitHubUser;
+  expiresAt: number;
+}
+const sessionTokens = new Map<string, SessionTokenData>();
+const SESSION_TOKEN_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
+
+// Clean up expired session tokens
+setInterval(() => {
+  const now = Date.now();
+  for (const [token, data] of sessionTokens.entries()) {
+    if (now > data.expiresAt) {
+      sessionTokens.delete(token);
+    }
+  }
+}, 60000);
+
 setInterval(() => {
   const now = Date.now();
   for (const [state, createdAt] of oauthStates.entries()) {
@@ -132,6 +152,27 @@ function requireSession(
   req: Request,
   res: Response
 ): { githubAccessToken: string; githubUser: GitHubUser } | undefined {
+  // First, try to use session token from header (workaround for cross-origin cookies)
+  const sessionToken = req.headers["x-session-token"] as string | undefined;
+
+  if (sessionToken && sessionTokens.has(sessionToken)) {
+    const tokenData = sessionTokens.get(sessionToken)!;
+
+    // Check if token is expired
+    if (Date.now() > tokenData.expiresAt) {
+      sessionTokens.delete(sessionToken);
+      console.log("Session token expired");
+    } else {
+      // Token is valid - use it for authentication
+      console.log("Using session token for authentication (cookie workaround)");
+      return {
+        githubAccessToken: tokenData.githubAccessToken,
+        githubUser: tokenData.githubUser,
+      };
+    }
+  }
+
+  // Fall back to cookie-based session
   // Check if session exists
   if (!req.session) {
     console.error("No session found in request");
@@ -327,8 +368,27 @@ app.get("/auth/github/callback", async (req: Request, res: Response) => {
       frontendOrigin: FRONTEND_ORIGIN,
     });
 
+    // Generate a temporary token for cross-origin cookie workaround
+    // This allows the frontend to authenticate even if cookies aren't sent
+    // Store the full session data in the token map
+    const tempToken = crypto.randomBytes(32).toString("hex");
+    sessionTokens.set(tempToken, {
+      githubAccessToken: accessToken,
+      githubUser: userResponse.data,
+      expiresAt: Date.now() + SESSION_TOKEN_EXPIRY_MS,
+    });
+    console.log(
+      "Generated temporary session token for cross-origin workaround",
+      {
+        token: tempToken.substring(0, 8) + "...",
+        hasToken: !!accessToken,
+        hasUser: !!userResponse.data,
+      }
+    );
+
     const redirectUrl = new URL(FRONTEND_ORIGIN);
     redirectUrl.searchParams.set("github_connected", "true");
+    redirectUrl.searchParams.set("session_token", tempToken);
 
     console.log("Redirecting to frontend:", redirectUrl.toString());
 

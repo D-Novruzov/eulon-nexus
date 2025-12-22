@@ -29,11 +29,22 @@ const GitHubConnectCard: React.FC<GitHubConnectCardProps> = ({
   const refreshStatus = useCallback(async () => {
     try {
       setError(null);
+
+      // Get session token from localStorage (workaround for cross-origin cookies)
+      const sessionToken = localStorage.getItem("github_session_token");
+
+      const headers: HeadersInit = {
+        "Content-Type": "application/json",
+      };
+
+      // Add session token to header if available
+      if (sessionToken) {
+        headers["X-Session-Token"] = sessionToken;
+      }
+
       const res = await fetch(`${API_BASE_URL}/integrations/github/me`, {
         credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers,
       });
 
       if (!res.ok) {
@@ -70,6 +81,14 @@ const GitHubConnectCard: React.FC<GitHubConnectCardProps> = ({
   useEffect(() => {
     const url = new URL(window.location.href);
     if (url.searchParams.get("github_connected") === "true") {
+      // Extract session token from URL (workaround for cross-origin cookies)
+      const sessionToken = url.searchParams.get("session_token");
+      if (sessionToken) {
+        // Store the session token in localStorage for future requests
+        localStorage.setItem("github_session_token", sessionToken);
+        console.log("Stored session token for cross-origin authentication");
+      }
+
       // After OAuth callback, wait a bit for session to be fully established
       // then retry with exponential backoff
       const retryWithBackoff = async (attempt = 0) => {
@@ -101,6 +120,7 @@ const GitHubConnectCard: React.FC<GitHubConnectCardProps> = ({
 
       void retryWithBackoff();
       url.searchParams.delete("github_connected");
+      url.searchParams.delete("session_token");
       window.history.replaceState({}, document.title, url.toString());
     } else {
       void refreshStatus();
@@ -130,12 +150,21 @@ const GitHubConnectCard: React.FC<GitHubConnectCardProps> = ({
         return;
       }
 
+      // Get session token from localStorage if available
+      const sessionToken = localStorage.getItem("github_session_token");
+
+      const headers: HeadersInit = {
+        "Content-Type": "application/json",
+      };
+
+      if (sessionToken) {
+        headers["X-Session-Token"] = sessionToken;
+      }
+
       const res = await fetch(`${API_BASE_URL}/auth/github`, {
         method: "POST",
         credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers,
       });
 
       console.log("GitHub OAuth response:", {

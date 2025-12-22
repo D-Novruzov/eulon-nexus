@@ -41,8 +41,20 @@ const GitHubRepoPicker: React.FC<GitHubRepoPickerProps> = ({
     try {
       setIsLoading(true);
       setError(null);
+
+      // Get session token from localStorage (workaround for cross-origin cookies)
+      const sessionToken = localStorage.getItem("github_session_token");
+
+      const headers: HeadersInit = {};
+
+      // Add session token to header if available
+      if (sessionToken) {
+        headers["X-Session-Token"] = sessionToken;
+      }
+
       const res = await fetch(`${API_BASE_URL}/integrations/github/repos`, {
         credentials: "include",
+        headers,
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
