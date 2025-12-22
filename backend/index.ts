@@ -33,7 +33,8 @@ const port = process.env.PORT ? Number(process.env.PORT) : 4000;
 const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID;
 const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET;
 const GITHUB_CALLBACK_URL =
-  process.env.GITHUB_CALLBACK_URL || "http://localhost:4000/auth/github/callback";
+  process.env.GITHUB_CALLBACK_URL ||
+  "http://localhost:4000/auth/github/callback";
 
 // EulonAI frontend origin; adjust if needed.
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "http://localhost:5173";
@@ -42,13 +43,16 @@ app.use(
   cors({
     origin: FRONTEND_ORIGIN,
     credentials: true,
-  }),
+  })
 );
 app.use(express.json());
 app.use(cookieParser());
 
-const isProduction = process.env.NODE_ENV === "production" || GITHUB_CALLBACK_URL.startsWith("https://");
-const sessionSecret = process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex");
+const isProduction =
+  process.env.NODE_ENV === "production" ||
+  GITHUB_CALLBACK_URL.startsWith("https://");
+const sessionSecret =
+  process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex");
 
 app.use(
   session({
@@ -103,11 +107,16 @@ declare module "express-serve-static-core" {
   }
 }
 
-function requireSession(req: Request, res: Response): { githubAccessToken: string; githubUser: GitHubUser } | undefined {
+function requireSession(
+  req: Request,
+  res: Response
+): { githubAccessToken: string; githubUser: GitHubUser } | undefined {
   // Check if session exists
   if (!req.session) {
     console.error("No session found in request");
-    res.status(401).json({ error: "Not authenticated with GitHub", reason: "no_session" });
+    res
+      .status(401)
+      .json({ error: "Not authenticated with GitHub", reason: "no_session" });
     return undefined;
   }
 
@@ -118,7 +127,10 @@ function requireSession(req: Request, res: Response): { githubAccessToken: strin
       hasUser: !!req.session.githubUser,
       sessionId: req.sessionID,
     });
-    res.status(401).json({ error: "Not authenticated with GitHub", reason: "missing_github_data" });
+    res.status(401).json({
+      error: "Not authenticated with GitHub",
+      reason: "missing_github_data",
+    });
     return undefined;
   }
 
@@ -132,18 +144,38 @@ function requireSession(req: Request, res: Response): { githubAccessToken: strin
  * POST /auth/github
  * Initiates the GitHub OAuth web flow by redirecting the browser.
  */
-app.post("/auth/github", (_req: Request, res: Response) => {
+app.post("/auth/github", (req: Request, res: Response) => {
   try {
+    console.log("POST /auth/github received", {
+      origin: req.headers.origin,
+      referer: req.headers.referer,
+      hasClientId: !!GITHUB_CLIENT_ID,
+      hasClientSecret: !!GITHUB_CLIENT_SECRET,
+      callbackUrl: GITHUB_CALLBACK_URL,
+      frontendOrigin: FRONTEND_ORIGIN,
+    });
+
     if (!GITHUB_CLIENT_ID || !GITHUB_CLIENT_SECRET) {
-      return res.status(500).json({ 
+      console.error("GitHub OAuth not configured - missing credentials");
+      return res.status(500).json({
         error: "GitHub OAuth not configured",
-        message: "Please set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET environment variables."
+        message:
+          "Please set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET environment variables.",
+        details: {
+          hasClientId: !!GITHUB_CLIENT_ID,
+          hasClientSecret: !!GITHUB_CLIENT_SECRET,
+        },
       });
     }
 
     const state = createStateToken();
     oauthStates.set(state, Date.now());
-    console.log("Generated OAuth state:", state, "Total states in store:", oauthStates.size);
+    console.log(
+      "Generated OAuth state:",
+      state,
+      "Total states in store:",
+      oauthStates.size
+    );
 
     const params = new URLSearchParams({
       client_id: GITHUB_CLIENT_ID,
@@ -153,13 +185,16 @@ app.post("/auth/github", (_req: Request, res: Response) => {
     });
 
     const authorizeUrl = `https://github.com/login/oauth/authorize?${params.toString()}`;
-    console.log("OAuth authorization URL generated");
+    console.log(
+      "OAuth authorization URL generated:",
+      authorizeUrl.substring(0, 100) + "..."
+    );
     res.json({ authorizeUrl });
   } catch (error) {
     console.error("Error in /auth/github:", error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: "Failed to initiate GitHub OAuth",
-      message: error instanceof Error ? error.message : "Unknown error"
+      message: error instanceof Error ? error.message : "Unknown error",
     });
   }
 });
@@ -188,7 +223,7 @@ app.get("/auth/github/callback", async (req: Request, res: Response) => {
         console.error("Invalid state type:", typeof state);
         return res.status(400).send("Invalid OAuth state parameter type");
       }
-      
+
       // Validate state exists in our store (it should if we generated it)
       if (oauthStates.has(state)) {
         // Valid state - clean it up
@@ -197,7 +232,10 @@ app.get("/auth/github/callback", async (req: Request, res: Response) => {
       } else {
         // State not found - might have expired (5 min TTL) or be invalid
         // Log warning but don't fail to allow for edge cases (e.g., slow user)
-        console.warn("State not found in store (may have expired):", state.substring(0, 8) + "...");
+        console.warn(
+          "State not found in store (may have expired):",
+          state.substring(0, 8) + "..."
+        );
       }
     } else {
       // No state provided - log warning but proceed (for backward compatibility)
@@ -220,7 +258,7 @@ app.get("/auth/github/callback", async (req: Request, res: Response) => {
         headers: {
           Accept: "application/json",
         },
-      },
+      }
     );
 
     const accessToken = tokenResponse.data.access_token as string | undefined;
@@ -228,16 +266,19 @@ app.get("/auth/github/callback", async (req: Request, res: Response) => {
       return res.status(500).send("Failed to obtain GitHub access token");
     }
 
-    const userResponse = await axios.get<GitHubUser>("https://api.github.com/user", {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        Accept: "application/vnd.github.v3+json",
-      },
-    });
+    const userResponse = await axios.get<GitHubUser>(
+      "https://api.github.com/user",
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: "application/vnd.github.v3+json",
+        },
+      }
+    );
 
     req.session.githubAccessToken = accessToken;
     req.session.githubUser = userResponse.data;
-    
+
     // Ensure session is saved before redirecting
     await new Promise<void>((resolve, reject) => {
       req.session.save((err) => {
@@ -273,7 +314,7 @@ app.get("/integrations/github/me", (req: Request, res: Response) => {
   const hasSession = !!req.session;
   const hasToken = !!req.session?.githubAccessToken;
   const hasUser = !!req.session?.githubUser;
-  
+
   if (!hasSession || !hasToken || !hasUser) {
     console.log("Session check failed:", {
       hasSession,
@@ -316,7 +357,7 @@ app.get("/integrations/github/repos", async (req: Request, res: Response) => {
           visibility: "all",
           affiliation: "owner,collaborator,organization_member",
         },
-      },
+      }
     );
 
     const normalized: NormalizedRepo[] = response.data.map((repo) => ({
@@ -371,7 +412,7 @@ app.post("/integrations/github/import", async (req: Request, res: Response) => {
               Authorization: `Bearer ${session.githubAccessToken}`,
               Accept: "application/vnd.github.v3+json",
             },
-          },
+          }
         );
 
         const commitHash = commitResponse.data?.sha as string | undefined;
@@ -387,7 +428,7 @@ app.post("/integrations/github/import", async (req: Request, res: Response) => {
       } catch (innerError) {
         console.error(
           `Failed to resolve HEAD for ${repo.owner}/${repo.name}@${branch}`,
-          innerError,
+          innerError
         );
       }
     }
@@ -418,8 +459,41 @@ app.get("/health", (_req: Request, res: Response) => {
   });
 });
 
+/**
+ * GET /debug/config
+ * Diagnostic endpoint to check OAuth configuration (for troubleshooting)
+ * This endpoint helps verify that environment variables are set correctly
+ */
+app.get("/debug/config", (req: Request, res: Response) => {
+  const config = {
+    githubOAuth: {
+      hasClientId: !!GITHUB_CLIENT_ID,
+      hasClientSecret: !!GITHUB_CLIENT_SECRET,
+      clientIdLength: GITHUB_CLIENT_ID?.length || 0,
+      clientSecretLength: GITHUB_CLIENT_SECRET?.length || 0,
+      callbackUrl: GITHUB_CALLBACK_URL,
+      isConfigured: !!(GITHUB_CLIENT_ID && GITHUB_CLIENT_SECRET),
+    },
+    cors: {
+      allowedOrigin: FRONTEND_ORIGIN,
+      requestOrigin: req.headers.origin || "not provided",
+      originMatches: req.headers.origin === FRONTEND_ORIGIN,
+    },
+    session: {
+      cookieName: "eulonai_session",
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax",
+    },
+    server: {
+      port,
+      nodeEnv: process.env.NODE_ENV || "not set",
+      isProduction,
+    },
+  };
+
+  res.json(config);
+});
+
 app.listen(port, () => {
   console.log(`Server listening on http://localhost:${port}`);
 });
-
-

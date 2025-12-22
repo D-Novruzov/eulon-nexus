@@ -35,7 +35,7 @@ const GitHubConnectCard: React.FC<GitHubConnectCardProps> = ({
           "Content-Type": "application/json",
         },
       });
-      
+
       if (!res.ok) {
         if (res.status === 401) {
           // Not authenticated - this is expected if not connected
@@ -46,7 +46,7 @@ const GitHubConnectCard: React.FC<GitHubConnectCardProps> = ({
         // Other errors
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       }
-      
+
       const data = (await res.json()) as GitHubMeResponse;
       if (data.connected) {
         setIsConnected(true);
@@ -75,23 +75,30 @@ const GitHubConnectCard: React.FC<GitHubConnectCardProps> = ({
       const retryWithBackoff = async (attempt = 0) => {
         const maxAttempts = 3;
         const delay = Math.min(1000 * Math.pow(2, attempt), 3000); // Max 3 seconds
-        
+
         if (attempt > 0) {
-          await new Promise(resolve => setTimeout(resolve, delay));
+          await new Promise((resolve) => setTimeout(resolve, delay));
         }
-        
+
         try {
           await refreshStatus();
         } catch (e) {
           if (attempt < maxAttempts) {
-            console.log(`Retrying GitHub status check (attempt ${attempt + 1}/${maxAttempts})...`);
+            console.log(
+              `Retrying GitHub status check (attempt ${
+                attempt + 1
+              }/${maxAttempts})...`
+            );
             await retryWithBackoff(attempt + 1);
           } else {
-            console.error("Failed to refresh GitHub auth status after retries", e);
+            console.error(
+              "Failed to refresh GitHub auth status after retries",
+              e
+            );
           }
         }
       };
-      
+
       void retryWithBackoff();
       url.searchParams.delete("github_connected");
       window.history.replaceState({}, document.title, url.toString());
@@ -105,8 +112,24 @@ const GitHubConnectCard: React.FC<GitHubConnectCardProps> = ({
       setIsConnecting(true);
       setError(null);
 
-      console.log("Initiating GitHub OAuth flow...", { apiBaseUrl: API_BASE_URL });
-      
+      console.log("Initiating GitHub OAuth flow...", {
+        apiBaseUrl: API_BASE_URL,
+        currentUrl: window.location.href,
+      });
+
+      // Check if API_BASE_URL is still localhost in production
+      if (
+        API_BASE_URL.includes("localhost") &&
+        window.location.href.includes("railway.app")
+      ) {
+        const errorMsg =
+          "Configuration Error: Frontend is trying to connect to localhost. Please set VITE_API_BASE_URL environment variable in Railway to your backend URL.";
+        console.error(errorMsg);
+        setError(errorMsg);
+        setIsConnecting(false);
+        return;
+      }
+
       const res = await fetch(`${API_BASE_URL}/auth/github`, {
         method: "POST",
         credentials: "include",
@@ -115,26 +138,55 @@ const GitHubConnectCard: React.FC<GitHubConnectCardProps> = ({
         },
       });
 
-      console.log("GitHub OAuth response:", { status: res.status, ok: res.ok });
+      console.log("GitHub OAuth response:", {
+        status: res.status,
+        ok: res.ok,
+        statusText: res.statusText,
+        url: res.url,
+      });
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        const errorMessage = body.error || body.message || `HTTP ${res.status}: ${res.statusText}`;
-        console.error("GitHub OAuth failed:", { status: res.status, body, errorMessage });
-        throw new Error(errorMessage);
+        const errorMessage =
+          body.error || body.message || `HTTP ${res.status}: ${res.statusText}`;
+        const details = body.details || {};
+        console.error("GitHub OAuth failed:", {
+          status: res.status,
+          body,
+          errorMessage,
+          details,
+        });
+
+        // Provide more helpful error messages
+        let userFriendlyError = errorMessage;
+        if (
+          res.status === 500 &&
+          body.error === "GitHub OAuth not configured"
+        ) {
+          userFriendlyError =
+            "Backend configuration error: GitHub OAuth credentials are missing. Please check backend environment variables.";
+        } else if (res.status === 0 || res.status === 503) {
+          userFriendlyError = `Cannot connect to backend at ${API_BASE_URL}. Please verify VITE_API_BASE_URL is set correctly.`;
+        }
+
+        throw new Error(userFriendlyError);
       }
 
       const data = (await res.json()) as { authorizeUrl: string };
-      console.log("Redirecting to GitHub authorization URL");
-      
+      console.log("Received authorization URL, redirecting...", {
+        urlLength: data.authorizeUrl?.length,
+        urlPreview: data.authorizeUrl?.substring(0, 80) + "...",
+      });
+
       if (!data.authorizeUrl) {
         throw new Error("No authorization URL received from server");
       }
-      
+
       window.location.href = data.authorizeUrl;
     } catch (e) {
       console.error("GitHub connect failed", e);
-      const errorMessage = e instanceof Error ? e.message : "GitHub connection failed";
+      const errorMessage =
+        e instanceof Error ? e.message : "GitHub connection failed";
       setError(errorMessage);
       setIsConnecting(false);
     }
