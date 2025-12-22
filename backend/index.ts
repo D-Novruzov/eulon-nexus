@@ -62,16 +62,35 @@ app.use(
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: isProduction,
-      sameSite: isProduction ? "none" : "lax",
+      secure: isProduction, // Must be true for sameSite: "none" to work
+      sameSite: isProduction ? "none" : "lax", // "none" required for cross-origin cookies
       maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
       path: "/",
       // Don't set domain - let browser handle it for cross-origin
+      // Setting domain explicitly can break cross-origin cookies
     },
     // Add rolling session to extend expiry on activity
     rolling: true,
   })
 );
+
+// Middleware to log cookie information for debugging
+app.use((req: Request, _res: Response, next) => {
+  if (
+    req.path.includes("/auth/github") ||
+    req.path.includes("/integrations/github")
+  ) {
+    console.log("Request details:", {
+      path: req.path,
+      method: req.method,
+      origin: req.headers.origin,
+      cookie: req.headers.cookie ? "present" : "missing",
+      sessionId: req.sessionID,
+      hasSession: !!req.session,
+    });
+  }
+  next();
+});
 
 const oauthStates = new Map<string, number>();
 const STATE_EXPIRY_MS = 5 * 60 * 1000;
@@ -94,6 +113,7 @@ declare module "express-session" {
   interface SessionData {
     githubAccessToken?: string;
     githubUser?: GitHubUser;
+    testValue?: string;
   }
 }
 
@@ -103,6 +123,7 @@ declare module "express-serve-static-core" {
     session: Session & {
       githubAccessToken?: string;
       githubUser?: GitHubUser;
+      testValue?: string;
     };
   }
 }
@@ -296,9 +317,24 @@ app.get("/auth/github/callback", async (req: Request, res: Response) => {
       });
     });
 
+    // Log cookie information before redirect
+    const cookieHeader = res.getHeader("Set-Cookie");
+    console.log("Cookie being set before redirect:", {
+      cookieHeader: Array.isArray(cookieHeader)
+        ? cookieHeader[0]?.substring(0, 100)
+        : cookieHeader,
+      sessionId: req.sessionID,
+      frontendOrigin: FRONTEND_ORIGIN,
+    });
+
     const redirectUrl = new URL(FRONTEND_ORIGIN);
     redirectUrl.searchParams.set("github_connected", "true");
-    res.redirect(302, redirectUrl.toString());
+
+    console.log("Redirecting to frontend:", redirectUrl.toString());
+
+    // Use 303 See Other instead of 302 to ensure POST->GET redirect
+    // This helps with cookie handling in some browsers
+    res.redirect(303, redirectUrl.toString());
   } catch (error) {
     console.error("GitHub OAuth callback error:", error);
     res.status(500).send("GitHub OAuth failed");
@@ -310,24 +346,43 @@ app.get("/auth/github/callback", async (req: Request, res: Response) => {
  * Simple endpoint so the frontend can check whether GitHub is connected.
  */
 app.get("/integrations/github/me", (req: Request, res: Response) => {
-  // Add logging for debugging
+  // Add comprehensive logging for debugging
   const hasSession = !!req.session;
   const hasToken = !!req.session?.githubAccessToken;
   const hasUser = !!req.session?.githubUser;
+  const cookieHeader = req.headers.cookie;
+  const allCookies = cookieHeader
+    ? cookieHeader.split(";").map((c) => c.trim().split("=")[0])
+    : [];
+
+  console.log("GET /integrations/github/me:", {
+    hasSession,
+    hasToken,
+    hasUser,
+    sessionId: req.sessionID,
+    cookieHeader: cookieHeader ? "present" : "missing",
+    cookieNames: allCookies,
+    origin: req.headers.origin,
+    referer: req.headers.referer,
+  });
 
   if (!hasSession || !hasToken || !hasUser) {
-    console.log("Session check failed:", {
+    console.log("Session check failed - details:", {
       hasSession,
       hasToken,
       hasUser,
       sessionId: req.sessionID,
-      cookie: req.headers.cookie ? "present" : "missing",
+      cookie: cookieHeader ? "present" : "missing",
+      cookieNames: allCookies,
+      lookingForCookie: "eulonai_session",
+      foundSessionCookie: cookieHeader?.includes("eulonai_session"),
     });
   }
 
   const session = requireSession(req, res);
   if (!session) return;
 
+  console.log("Session check passed, returning user data");
   res.json({
     connected: true,
     user: session.githubUser,
@@ -483,6 +538,17 @@ app.get("/debug/config", (req: Request, res: Response) => {
       cookieName: "eulonai_session",
       secure: isProduction,
       sameSite: isProduction ? "none" : "lax",
+      hasSession: !!req.session,
+      sessionId: req.sessionID,
+      hasToken: !!req.session?.githubAccessToken,
+      hasUser: !!req.session?.githubUser,
+    },
+    cookies: {
+      received: req.headers.cookie ? "present" : "missing",
+      cookieHeader: req.headers.cookie || null,
+      cookieNames: req.headers.cookie
+        ? req.headers.cookie.split(";").map((c) => c.trim().split("=")[0])
+        : [],
     },
     server: {
       port,
@@ -492,6 +558,25 @@ app.get("/debug/config", (req: Request, res: Response) => {
   };
 
   res.json(config);
+});
+
+/**
+ * GET /debug/test-cookie
+ * Test endpoint to verify cookie setting works
+ */
+app.get("/debug/test-cookie", (req: Request, res: Response) => {
+  // Set a test value in session
+  if (req.session) {
+    req.session.testValue = "cookie-test-" + Date.now();
+  }
+
+  res.json({
+    message: "Test cookie set",
+    sessionId: req.sessionID,
+    testValue: req.session?.testValue,
+    cookieHeader: req.headers.cookie || "no cookies received",
+    setCookieHeader: res.getHeader("Set-Cookie"),
+  });
 });
 
 app.listen(port, () => {
