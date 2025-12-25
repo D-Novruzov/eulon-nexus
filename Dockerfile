@@ -3,10 +3,10 @@
 
 FROM node:20-alpine AS builder
 
-# Install build dependencies
+# Install ALL dependencies (including devDependencies for build)
 WORKDIR /app
 COPY backend/package*.json ./
-RUN npm ci --only=production
+RUN npm ci
 
 # Copy source and compile TypeScript
 COPY backend/ ./
@@ -21,10 +21,12 @@ ENV NODE_OPTIONS="--max-old-space-size=512"
 
 WORKDIR /app
 
-# Copy compiled output and node_modules from builder
+# Copy package files and install ONLY production dependencies
+COPY backend/package*.json ./
+RUN npm ci --only=production
+
+# Copy compiled output from builder
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./package.json
 
 # Expose port
 EXPOSE 4000
