@@ -1,7 +1,12 @@
-import { GitHubService, CompleteRepositoryStructure } from './github.js';
+import { GitHubService, CompleteRepositoryStructure } from "./github.js";
 
 export interface OptimizedProgress {
-  stage: 'analyzing' | 'discovering' | 'downloading' | 'processing' | 'complete';
+  stage:
+    | "analyzing"
+    | "discovering"
+    | "downloading"
+    | "processing"
+    | "complete";
   progress: number;
   message: string;
   filesProcessed?: number;
@@ -30,7 +35,8 @@ export class GitHubOptimizedService {
   }
 
   private constructor() {
-    this.githubService = new GitHubService();
+    // [CRITICAL PERFORMANCE FIX] Use singleton to reuse HTTP connections
+    this.githubService = GitHubService.getInstance();
   }
 
   /**
@@ -47,7 +53,7 @@ export class GitHubOptimizedService {
   async getRepositoryStructure(
     owner: string,
     repo: string,
-    branch: string = 'main',
+    branch: string = "main",
     options: OptimizedOptions = {},
     onProgress?: (progress: OptimizedProgress) => void
   ): Promise<CompleteRepositoryStructure> {
@@ -55,7 +61,7 @@ export class GitHubOptimizedService {
       batchSize = 20,
       maxConcurrent = 5,
       enableCaching = true,
-      cacheTimeout = 300000 // 5 minutes
+      cacheTimeout = 300000, // 5 minutes
     } = options;
 
     const startTime = performance.now();
@@ -63,39 +69,39 @@ export class GitHubOptimizedService {
     try {
       // Stage 1: Analyze repository
       onProgress?.({
-        stage: 'analyzing',
+        stage: "analyzing",
         progress: 0,
-        message: `Analyzing ${owner}/${repo}...`
+        message: `Analyzing ${owner}/${repo}...`,
       });
 
       console.log(`Repository ${owner}/${repo} - starting processing`);
 
       onProgress?.({
-        stage: 'analyzing',
+        stage: "analyzing",
         progress: 100,
-        message: `Repository analysis complete`
+        message: `Repository analysis complete`,
       });
 
       // Stage 2: Discover files with retry logic
       onProgress?.({
-        stage: 'discovering',
+        stage: "discovering",
         progress: 0,
-        message: 'Discovering repository structure...'
+        message: "Discovering repository structure...",
       });
 
       const files = await this.discoverFilesWithRetry(owner, repo, onProgress);
-      
+
       onProgress?.({
-        stage: 'discovering',
+        stage: "discovering",
         progress: 100,
-        message: `Found ${files.length} files`
+        message: `Found ${files.length} files`,
       });
 
       // Stage 3: Download files in optimized batches
       onProgress?.({
-        stage: 'downloading',
+        stage: "downloading",
         progress: 0,
-        message: `Downloading ${files.length} files...`
+        message: `Downloading ${files.length} files...`,
       });
 
       const fileContents = new Map<string, string>();
@@ -111,35 +117,45 @@ export class GitHubOptimizedService {
         // Process batch with concurrency limit
         const batchPromises = batch.map(async (file, index) => {
           const cacheKey = `${owner}/${repo}/${file.path}`;
-          
+
           // Check cache first
           if (enableCaching) {
             const cached = this.cache.get(cacheKey);
-            if (cached && (Date.now() - cached.timestamp) < cacheTimeout) {
+            if (cached && Date.now() - cached.timestamp < cacheTimeout) {
               return { path: file.path, content: cached.data, cached: true };
             }
           }
 
           try {
-            const content = await this.githubService.getFileContent(owner, repo, file.path);
-            
+            const content = await this.githubService.getFileContent(
+              owner,
+              repo,
+              file.path
+            );
+
             // Cache the result
             if (enableCaching) {
-              this.cache.set(cacheKey, { data: content, timestamp: Date.now() });
+              this.cache.set(cacheKey, {
+                data: content,
+                timestamp: Date.now(),
+              });
             }
-            
+
             return { path: file.path, content, cached: false };
           } catch (error) {
             console.warn(`Failed to download ${file.path}:`, error);
-            return { path: file.path, content: '', cached: false, error: true };
+            return { path: file.path, content: "", cached: false, error: true };
           }
         });
 
         // Process batch with concurrency limit
-        const batchResults = await this.processWithConcurrencyLimit(batchPromises, maxConcurrent);
+        const batchResults = await this.processWithConcurrencyLimit(
+          batchPromises,
+          maxConcurrent
+        );
 
         // Add successful downloads to results
-        batchResults.forEach(result => {
+        batchResults.forEach((result) => {
           if (!result.error && result.content) {
             fileContents.set(result.path, result.content);
             allPaths.push(result.path);
@@ -149,15 +165,17 @@ export class GitHubOptimizedService {
         // Update progress
         const processed = Math.min(batchEnd, files.length);
         const progress = Math.round((processed / files.length) * 100);
-        
+
         onProgress?.({
-          stage: 'downloading',
+          stage: "downloading",
           progress,
-          message: `Downloaded ${processed}/${files.length} files (Batch ${batchIndex + 1}/${totalBatches})`,
+          message: `Downloaded ${processed}/${files.length} files (Batch ${
+            batchIndex + 1
+          }/${totalBatches})`,
           filesProcessed: processed,
           totalFiles: files.length,
           currentBatch: batchIndex + 1,
-          totalBatches
+          totalBatches,
         });
       }
 
@@ -165,22 +183,25 @@ export class GitHubOptimizedService {
       const processingTime = endTime - startTime;
 
       onProgress?.({
-        stage: 'complete',
+        stage: "complete",
         progress: 100,
         message: `Completed in ${(processingTime / 1000).toFixed(2)}s`,
         filesProcessed: allPaths.length,
-        totalFiles: files.length
+        totalFiles: files.length,
       });
 
-      console.log(`Optimized processing completed: ${allPaths.length} files in ${(processingTime / 1000).toFixed(2)}s`);
+      console.log(
+        `Optimized processing completed: ${allPaths.length} files in ${(
+          processingTime / 1000
+        ).toFixed(2)}s`
+      );
 
       return {
         allPaths,
-        fileContents
+        fileContents,
       };
-
     } catch (error) {
-      console.error('Error in optimized processing:', error);
+      console.error("Error in optimized processing:", error);
       throw error;
     }
   }
@@ -196,7 +217,7 @@ export class GitHubOptimizedService {
     const executing: Promise<void>[] = [];
 
     for (const promise of promises) {
-      const p = promise.then(result => {
+      const p = promise.then((result) => {
         results.push(result);
       });
 
@@ -204,7 +225,10 @@ export class GitHubOptimizedService {
 
       if (executing.length >= maxConcurrent) {
         await Promise.race(executing);
-        executing.splice(executing.findIndex(p => p === executing[0]), 1);
+        executing.splice(
+          executing.findIndex((p) => p === executing[0]),
+          1
+        );
       }
     }
 
@@ -215,7 +239,10 @@ export class GitHubOptimizedService {
   /**
    * Get performance comparison
    */
-  async comparePerformance(owner: string, repo: string): Promise<{
+  async comparePerformance(
+    owner: string,
+    repo: string
+  ): Promise<{
     optimized: { estimatedTime: number; estimatedCalls: number };
     standard: { estimatedTime: number; estimatedCalls: number };
     improvement: number;
@@ -236,13 +263,13 @@ export class GitHubOptimizedService {
     return {
       optimized: {
         estimatedTime: optimizedTime,
-        estimatedCalls: Math.round(optimizedCalls)
+        estimatedCalls: Math.round(optimizedCalls),
       },
       standard: {
         estimatedTime: standardTime,
-        estimatedCalls: Math.round(standardCalls)
+        estimatedCalls: Math.round(standardCalls),
       },
-      improvement: Math.round(improvement)
+      improvement: Math.round(improvement),
     };
   }
 
@@ -251,7 +278,7 @@ export class GitHubOptimizedService {
    */
   clearCache(): void {
     this.cache.clear();
-    console.log('Cache cleared');
+    console.log("Cache cleared");
   }
 
   /**
@@ -260,7 +287,7 @@ export class GitHubOptimizedService {
   getCacheStats(): { size: number; entries: number } {
     return {
       size: this.cache.size,
-      entries: this.cache.size
+      entries: this.cache.size,
     };
   }
 
@@ -277,47 +304,58 @@ export class GitHubOptimizedService {
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        console.log(`Attempt ${attempt}/${maxRetries} to discover files for ${owner}/${repo}`);
-        
+        console.log(
+          `Attempt ${attempt}/${maxRetries} to discover files for ${owner}/${repo}`
+        );
+
         onProgress?.({
-          stage: 'discovering',
+          stage: "discovering",
           progress: (attempt - 1) * 30,
-          message: `Discovering files (attempt ${attempt}/${maxRetries})...`
+          message: `Discovering files (attempt ${attempt}/${maxRetries})...`,
         });
 
-        const files = await this.githubService.getAllFilesRecursively(owner, repo);
-        console.log(`Successfully discovered ${files.length} files on attempt ${attempt}`);
-        
+        const files = await this.githubService.getAllFilesRecursively(
+          owner,
+          repo
+        );
+        console.log(
+          `Successfully discovered ${files.length} files on attempt ${attempt}`
+        );
+
         // If we got 0 files and this is the first attempt, it might be due to rate limiting
         // Check if we have rate limit info to confirm
         if (files.length === 0 && attempt === 1) {
           const rateLimitInfo = this.githubService.getRateLimitInfo();
           if (rateLimitInfo && rateLimitInfo.remaining === 0) {
-            throw new Error('Rate limit exceeded - no files returned');
+            throw new Error("Rate limit exceeded - no files returned");
           }
         }
-        
-        return files;
 
+        return files;
       } catch (error: any) {
         console.warn(`Attempt ${attempt} failed:`, error.message);
 
-        if (error.message?.includes('rate limit exceeded') || error.message?.includes('403')) {
+        if (
+          error.message?.includes("rate limit exceeded") ||
+          error.message?.includes("403")
+        ) {
           if (attempt < maxRetries) {
             const delay = baseDelay * Math.pow(2, attempt - 1); // Exponential backoff
             console.log(`Rate limited. Waiting ${delay}ms before retry...`);
-            
+
             onProgress?.({
-              stage: 'discovering',
+              stage: "discovering",
               progress: attempt * 30,
-              message: `Rate limited. Waiting ${Math.round(delay / 1000)}s before retry...`
+              message: `Rate limited. Waiting ${Math.round(
+                delay / 1000
+              )}s before retry...`,
             });
 
-            await new Promise(resolve => setTimeout(resolve, delay));
+            await new Promise((resolve) => setTimeout(resolve, delay));
             continue;
           } else {
             // Final attempt failed, try fallback strategy
-            console.log('All retries failed. Trying fallback strategy...');
+            console.log("All retries failed. Trying fallback strategy...");
             return await this.discoverFilesFallback(owner, repo, onProgress);
           }
         } else {
@@ -327,7 +365,7 @@ export class GitHubOptimizedService {
       }
     }
 
-    throw new Error('Failed to discover files after all retries');
+    throw new Error("Failed to discover files after all retries");
   }
 
   /**
@@ -338,69 +376,76 @@ export class GitHubOptimizedService {
     repo: string,
     onProgress?: (progress: OptimizedProgress) => void
   ): Promise<Array<{ path: string; type: string; size: number }>> {
-    console.log('Using fallback strategy: trying to get root directory contents only');
-    
+    console.log(
+      "Using fallback strategy: trying to get root directory contents only"
+    );
+
     onProgress?.({
-      stage: 'discovering',
+      stage: "discovering",
       progress: 80,
-      message: 'Rate limited. Using fallback strategy...'
+      message: "Rate limited. Using fallback strategy...",
     });
 
     try {
       // Try to get just the root directory contents
-      const rootContents = await this.githubService.getRepositoryContents(owner, repo, '');
-      
+      const rootContents = await this.githubService.getRepositoryContents(
+        owner,
+        repo,
+        ""
+      );
+
       // Filter for files only (not directories)
       const files = rootContents
-        .filter(item => item.type === 'file')
-        .map(file => ({
+        .filter((item) => item.type === "file")
+        .map((file) => ({
           path: file.path,
           type: file.type,
-          size: file.size || 0
+          size: file.size || 0,
         }));
 
-      console.log(`Fallback strategy found ${files.length} files in root directory`);
-      
+      console.log(
+        `Fallback strategy found ${files.length} files in root directory`
+      );
+
       onProgress?.({
-        stage: 'discovering',
+        stage: "discovering",
         progress: 90,
-        message: `Found ${files.length} files in root directory (fallback mode)`
+        message: `Found ${files.length} files in root directory (fallback mode)`,
       });
 
       return files;
+    } catch (error) {
+      console.error("Fallback strategy also failed:", error);
 
-          } catch (error) {
-        console.error('Fallback strategy also failed:', error);
-        
-        // Return empty array as last resort
-        const authMessage = this.hasAuthentication() 
-          ? 'Try again later when rate limit resets'
-          : 'Consider adding a GitHub token for higher rate limits';
-        
-        onProgress?.({
-          stage: 'discovering',
-          progress: 100,
-          message: `Could not discover files due to rate limits. ${authMessage}`
-        });
+      // Return empty array as last resort
+      const authMessage = this.hasAuthentication()
+        ? "Try again later when rate limit resets"
+        : "Consider adding a GitHub token for higher rate limits";
 
-        // Return some common files that might exist in most repositories
-        const commonFiles = [
-          'README.md',
-          'package.json',
-          'requirements.txt',
-          'setup.py',
-          'Makefile',
-          '.gitignore',
-          'LICENSE'
-        ].map(file => ({
-          path: file,
-          type: 'file',
-          size: 0
-        }));
+      onProgress?.({
+        stage: "discovering",
+        progress: 100,
+        message: `Could not discover files due to rate limits. ${authMessage}`,
+      });
 
-        console.log(`Returning ${commonFiles.length} common files as fallback`);
-        return commonFiles;
-      }
+      // Return some common files that might exist in most repositories
+      const commonFiles = [
+        "README.md",
+        "package.json",
+        "requirements.txt",
+        "setup.py",
+        "Makefile",
+        ".gitignore",
+        "LICENSE",
+      ].map((file) => ({
+        path: file,
+        type: "file",
+        size: 0,
+      }));
+
+      console.log(`Returning ${commonFiles.length} common files as fallback`);
+      return commonFiles;
+    }
   }
 
   // Implement missing methods that GitHubService doesn't have
@@ -412,7 +457,10 @@ export class GitHubOptimizedService {
   async estimateRepositorySize(owner: string, repo: string): Promise<number> {
     try {
       // Get all files and estimate size based on file count
-      const files = await this.githubService.getAllFilesRecursively(owner, repo);
+      const files = await this.githubService.getAllFilesRecursively(
+        owner,
+        repo
+      );
       // Rough estimate: 2KB per file on average
       return files.length * 2;
     } catch (error) {
@@ -426,9 +474,9 @@ export class GitHubOptimizedService {
     try {
       // GitHub API doesn't have a direct branches endpoint in the service
       // Return common branch names as fallback
-      return ['main', 'master', 'develop'];
+      return ["main", "master", "develop"];
     } catch (error) {
-      return ['main', 'master', 'develop'];
+      return ["main", "master", "develop"];
     }
   }
 }
