@@ -28,8 +28,8 @@ RUN npm ci --only=production
 # Copy compiled output from builder
 COPY --from=builder /app/dist ./dist
 
-# Expose port
-EXPOSE 4000
+# Expose port (Railway uses dynamic PORT env var, typically 8080)
+EXPOSE 4000 8080
 
 # Health check (uses Railway's PORT environment variable)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
