@@ -31,9 +31,9 @@ COPY --from=builder /app/dist ./dist
 # Expose port
 EXPOSE 4000
 
-# Health check
+# Health check (uses Railway's PORT environment variable)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:4000/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); })"
+  CMD node -e "const port = process.env.PORT || 4000; require('http').get('http://localhost:' + port + '/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); })"
 
 # Start the server
 CMD ["node", "dist/index.js"]
