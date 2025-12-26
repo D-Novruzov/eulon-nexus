@@ -446,7 +446,6 @@ app.get("/integrations/github/me", (req: Request, res: Response) => {
   res.json({
     connected: true,
     user: session.githubUser,
-    accessToken: session.githubAccessToken, // Include token for frontend API calls
   });
 });
 
