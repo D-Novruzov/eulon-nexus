@@ -582,6 +582,70 @@ app.post("/integrations/github/import", async (req: Request, res: Response) => {
 });
 
 /**
+ * GET /integrations/github/archive/:owner/:repo/:branch
+ * Download repository as ZIP archive
+ * This is much faster than individual API calls (only 1 request!)
+ */
+app.get(
+  "/integrations/github/archive/:owner/:repo/:branch",
+  async (req: Request, res: Response) => {
+    const session = requireSession(req, res);
+    if (!session) return;
+
+    const { owner, repo, branch } = req.params;
+
+    if (!owner || !repo || !branch) {
+      return res.status(400).json({ error: "Missing required parameters" });
+    }
+
+    try {
+      console.log(`📦 Downloading archive for ${owner}/${repo}@${branch}...`);
+
+      // Download the archive from GitHub
+      const archiveUrl = `https://github.com/${owner}/${repo}/archive/refs/heads/${branch}.zip`;
+      const response = await axios.get(archiveUrl, {
+        headers: {
+          Authorization: `Bearer ${session.githubAccessToken}`,
+          Accept: "application/vnd.github.v3+json",
+        },
+        responseType: "arraybuffer",
+        maxContentLength: 100 * 1024 * 1024, // 100MB limit
+        timeout: 60000, // 60 second timeout
+      });
+
+      const archiveSizeMB = (response.data.byteLength / 1024 / 1024).toFixed(2);
+      console.log(`✅ Downloaded ${archiveSizeMB}MB archive`);
+
+      // Set appropriate headers
+      res.setHeader("Content-Type", "application/zip");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${repo}-${branch}.zip"`
+      );
+      res.setHeader("Content-Length", response.data.byteLength);
+
+      // Send the archive
+      res.send(Buffer.from(response.data));
+    } catch (error) {
+      console.error("GitHub archive download error:", error);
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 404) {
+          return res
+            .status(404)
+            .json({ error: "Repository or branch not found" });
+        }
+        if (error.response?.status === 403) {
+          return res
+            .status(403)
+            .json({ error: "Access denied or rate limit exceeded" });
+        }
+      }
+      res.status(500).json({ error: "Failed to download repository archive" });
+    }
+  }
+);
+
+/**
  * GET /health
  * Health check endpoint to verify server and configuration status
  */

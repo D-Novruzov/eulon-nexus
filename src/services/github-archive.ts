@@ -1,5 +1,5 @@
-import JSZip from 'jszip';
-import { GitHubProxyService } from './github-proxy.js';
+import JSZip from "jszip";
+import { GitHubProxyService } from "./github-proxy.js";
 
 export interface ArchiveRepositoryStructure {
   allPaths: string[];
@@ -10,16 +10,23 @@ export interface ArchiveRepositoryStructure {
 }
 
 export interface ArchiveProgress {
-  stage: 'downloading' | 'extracting' | 'processing' | 'complete';
+  stage: "downloading" | "extracting" | "processing" | "complete";
   progress: number; // 0-100
   message: string;
   filesProcessed?: number;
   totalFiles?: number;
 }
 
+export interface ArchiveOptions {
+  useBackendProxy?: boolean; // Use backend proxy for authenticated downloads
+  backendUrl?: string; // Backend URL (default: http://localhost:4000)
+  accessToken?: string; // GitHub access token for authenticated downloads
+}
+
 export class GitHubArchiveService {
   private static instance: GitHubArchiveService;
   private proxyService: GitHubProxyService;
+  private defaultBackendUrl = "http://localhost:4000";
 
   public static getInstance(): GitHubArchiveService {
     if (!GitHubArchiveService.instance) {
@@ -34,127 +41,176 @@ export class GitHubArchiveService {
 
   /**
    * Download and process repository using GitHub's archive feature
-   * This is much faster than individual API calls
+   * This is much faster than individual API calls (only 1 request!)
    */
   async getRepositoryArchive(
-    owner: string, 
-    repo: string, 
-    branch: string = 'main',
-    onProgress?: (progress: ArchiveProgress) => void
+    owner: string,
+    repo: string,
+    branch: string = "main",
+    onProgress?: (progress: ArchiveProgress) => void,
+    options: ArchiveOptions = {}
   ): Promise<ArchiveRepositoryStructure> {
     const startTime = performance.now();
-    
+    const {
+      useBackendProxy = false,
+      backendUrl = this.defaultBackendUrl,
+      accessToken,
+    } = options;
+
     try {
       // Stage 1: Download ZIP archive
       onProgress?.({
-        stage: 'downloading',
+        stage: "downloading",
         progress: 0,
-        message: `Downloading ${owner}/${repo} archive...`
+        message: `Downloading ${owner}/${repo} archive...`,
       });
 
-      // Use proxy to bypass CORS restrictions
-      const archiveUrl = `https://github.com/${owner}/${repo}/archive/refs/heads/${branch}.zip`;
-      const response = await this.proxyService.downloadWithProxy(archiveUrl, {
-        useProxy: true,
-        timeout: 60000 // 60 second timeout for archive downloads
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Failed to download archive: ${response.status} ${response.statusText}`);
+      let response: Response;
+
+      // Try backend proxy first if available (better for authenticated downloads)
+      if (useBackendProxy && accessToken) {
+        console.log(
+          "📦 Using backend proxy for authenticated archive download"
+        );
+        try {
+          response = await fetch(
+            `${backendUrl}/integrations/github/archive/${owner}/${repo}/${branch}`,
+            {
+              headers: {
+                "X-Session-Token": accessToken,
+              },
+              credentials: "include",
+            }
+          );
+
+          if (!response.ok) {
+            throw new Error(`Backend proxy failed: ${response.status}`);
+          }
+        } catch (error) {
+          console.warn(
+            "⚠️ Backend proxy failed, falling back to CORS proxy:",
+            error
+          );
+          // Fall back to CORS proxy
+          const archiveUrl = `https://github.com/${owner}/${repo}/archive/refs/heads/${branch}.zip`;
+          response = await this.proxyService.downloadWithProxy(archiveUrl, {
+            useProxy: true,
+            timeout: 60000,
+          });
+        }
+      } else {
+        // Use CORS proxy for public repositories
+        console.log("📦 Using CORS proxy for archive download");
+        const archiveUrl = `https://github.com/${owner}/${repo}/archive/refs/heads/${branch}.zip`;
+        response = await this.proxyService.downloadWithProxy(archiveUrl, {
+          useProxy: true,
+          timeout: 60000, // 60 second timeout for archive downloads
+        });
       }
-      
+
+      if (!response.ok) {
+        throw new Error(
+          `Failed to download archive: ${response.status} ${response.statusText}`
+        );
+      }
+
       const zipBlob = await response.blob();
       const archiveSizeMB = (zipBlob.size / 1024 / 1024).toFixed(2);
-      
+
       onProgress?.({
-        stage: 'downloading',
+        stage: "downloading",
         progress: 100,
-        message: `Downloaded ${archiveSizeMB}MB archive`
+        message: `Downloaded ${archiveSizeMB}MB archive (${
+          useBackendProxy ? "authenticated" : "public"
+        })`,
       });
 
       // Stage 2: Extract ZIP
       onProgress?.({
-        stage: 'extracting',
+        stage: "extracting",
         progress: 0,
-        message: 'Extracting archive...'
+        message: "Extracting archive...",
       });
 
       const zip = new JSZip();
       await zip.loadAsync(zipBlob);
-      
+
       onProgress?.({
-        stage: 'extracting',
+        stage: "extracting",
         progress: 100,
-        message: 'Archive extracted successfully'
+        message: "Archive extracted successfully",
       });
 
       // Stage 3: Process files
       onProgress?.({
-        stage: 'processing',
+        stage: "processing",
         progress: 0,
-        message: 'Processing files...'
+        message: "Processing files...",
       });
 
       const fileContents = new Map<string, string>();
       const allPaths: string[] = [];
       let totalSize = 0;
-      
+
       // Get all files to process
-      const filesToProcess = Object.entries(zip.files).filter(([path, file]) => 
-        !file.dir && this.shouldIncludeFile(path)
+      const filesToProcess = Object.entries(zip.files).filter(
+        ([path, file]) => !file.dir && this.shouldIncludeFile(path)
       );
-      
+
       const totalFiles = filesToProcess.length;
-      
+
       // Process files in batches to avoid memory issues
       const batchSize = 50;
       for (let i = 0; i < filesToProcess.length; i += batchSize) {
         const batch = filesToProcess.slice(i, i + batchSize);
-        
+
         // Process batch in parallel
-        const batchPromises = batch.map(([path, file]) => 
+        const batchPromises = batch.map(([path, file]) =>
           this.processFile(file, path, fileContents, allPaths)
         );
-        
+
         const batchResults = await Promise.all(batchPromises);
         totalSize += batchResults.reduce((sum, size) => sum + size, 0);
-        
+
         // Update progress
         const processed = Math.min(i + batchSize, totalFiles);
         const progress = Math.round((processed / totalFiles) * 100);
-        
+
         onProgress?.({
-          stage: 'processing',
+          stage: "processing",
           progress,
           message: `Processed ${processed}/${totalFiles} files`,
           filesProcessed: processed,
-          totalFiles
+          totalFiles,
         });
       }
-      
+
       const endTime = performance.now();
       const processingTime = endTime - startTime;
-      
+
       onProgress?.({
-        stage: 'complete',
+        stage: "complete",
         progress: 100,
         message: `Completed in ${(processingTime / 1000).toFixed(2)}s`,
         filesProcessed: totalFiles,
-        totalFiles
+        totalFiles,
       });
-      
-      console.log(`Archive processing completed: ${totalFiles} files in ${(processingTime / 1000).toFixed(2)}s`);
-      
+
+      console.log(
+        `Archive processing completed: ${totalFiles} files in ${(
+          processingTime / 1000
+        ).toFixed(2)}s`
+      );
+
       return {
         allPaths,
         fileContents,
         totalFiles,
         totalSize,
-        processingTime
+        processingTime,
       };
-      
     } catch (error) {
-      console.error('Error downloading repository archive:', error);
+      console.error("Error downloading repository archive:", error);
       throw error;
     }
   }
@@ -171,18 +227,20 @@ export class GitHubArchiveService {
     try {
       // Remove the repository name prefix from path
       const cleanPath = this.cleanArchivePath(path);
-      
+
       // Skip binary files and large files
-      if (this.isBinaryFile(cleanPath) || file._data.uncompressedSize > 1024 * 1024) {
+      if (
+        this.isBinaryFile(cleanPath) ||
+        file._data.uncompressedSize > 1024 * 1024
+      ) {
         return 0;
       }
-      
-      const content = await file.async('string');
+
+      const content = await file.async("string");
       fileContents.set(cleanPath, content);
       allPaths.push(cleanPath);
-      
+
       return content.length;
-      
     } catch (error) {
       console.warn(`Failed to process file ${path}:`, error);
       return 0;
@@ -195,9 +253,9 @@ export class GitHubArchiveService {
   private cleanArchivePath(path: string): string {
     // Archive paths look like: repo-name-main/src/file.ts
     // We want: src/file.ts
-    const parts = path.split('/');
+    const parts = path.split("/");
     if (parts.length > 1) {
-      return parts.slice(1).join('/');
+      return parts.slice(1).join("/");
     }
     return path;
   }
@@ -207,28 +265,74 @@ export class GitHubArchiveService {
    */
   private shouldIncludeFile(path: string): boolean {
     const cleanPath = this.cleanArchivePath(path);
-    
+
     // Skip common directories
     const skipDirs = [
-      '.git', 'node_modules', 'dist', 'build', '.next', '.nuxt',
-      'coverage', '.nyc_output', '.cache', '.parcel-cache', '.vscode',
-      '.idea', '.github', 'docs', 'examples', 'tests', '__tests__',
-      'test', 'specs', 'spec', 'e2e', 'cypress', 'playwright'
+      ".git",
+      "node_modules",
+      "dist",
+      "build",
+      ".next",
+      ".nuxt",
+      "coverage",
+      ".nyc_output",
+      ".cache",
+      ".parcel-cache",
+      ".vscode",
+      ".idea",
+      ".github",
+      "docs",
+      "examples",
+      "tests",
+      "__tests__",
+      "test",
+      "specs",
+      "spec",
+      "e2e",
+      "cypress",
+      "playwright",
     ];
-    
-    if (skipDirs.some(dir => cleanPath.includes(dir))) {
+
+    if (skipDirs.some((dir) => cleanPath.includes(dir))) {
       return false;
     }
-    
+
     // Only include source files
     const sourceExtensions = [
-      '.js', '.ts', '.jsx', '.tsx', '.py', '.java', '.cpp', '.c', 
-      '.h', '.hpp', '.cs', '.php', '.rb', '.go', '.rs', '.json',
-      '.yaml', '.yml', '.toml', '.md', '.txt', '.xml', '.html',
-      '.css', '.scss', '.sass', '.less', '.vue', '.svelte'
+      ".js",
+      ".ts",
+      ".jsx",
+      ".tsx",
+      ".py",
+      ".java",
+      ".cpp",
+      ".c",
+      ".h",
+      ".hpp",
+      ".cs",
+      ".php",
+      ".rb",
+      ".go",
+      ".rs",
+      ".json",
+      ".yaml",
+      ".yml",
+      ".toml",
+      ".md",
+      ".txt",
+      ".xml",
+      ".html",
+      ".css",
+      ".scss",
+      ".sass",
+      ".less",
+      ".vue",
+      ".svelte",
     ];
-    
-    return sourceExtensions.some(ext => cleanPath.toLowerCase().endsWith(ext));
+
+    return sourceExtensions.some((ext) =>
+      cleanPath.toLowerCase().endsWith(ext)
+    );
   }
 
   /**
@@ -237,23 +341,79 @@ export class GitHubArchiveService {
   private isBinaryFile(path: string): boolean {
     const binaryExtensions = [
       // Images
-      '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.bmp', '.tiff', '.webp',
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".gif",
+      ".svg",
+      ".ico",
+      ".bmp",
+      ".tiff",
+      ".webp",
       // Fonts
-      '.woff', '.woff2', '.ttf', '.eot', '.otf',
+      ".woff",
+      ".woff2",
+      ".ttf",
+      ".eot",
+      ".otf",
       // Documents
-      '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+      ".pdf",
+      ".doc",
+      ".docx",
+      ".xls",
+      ".xlsx",
+      ".ppt",
+      ".pptx",
       // Archives
-      '.zip', '.tar', '.gz', '.rar', '.7z', '.bz2', '.xz', '.lzma',
+      ".zip",
+      ".tar",
+      ".gz",
+      ".rar",
+      ".7z",
+      ".bz2",
+      ".xz",
+      ".lzma",
       // Executables & Libraries
-      '.exe', '.dll', '.so', '.dylib', '.class', '.pyc', '.o', '.a', '.lib', '.wasm',
+      ".exe",
+      ".dll",
+      ".so",
+      ".dylib",
+      ".class",
+      ".pyc",
+      ".o",
+      ".a",
+      ".lib",
+      ".wasm",
       // Package formats
-      '.jar', '.war', '.ear', '.deb', '.rpm', '.dmg', '.msi', '.pkg', '.apk', '.ipa',
+      ".jar",
+      ".war",
+      ".ear",
+      ".deb",
+      ".rpm",
+      ".dmg",
+      ".msi",
+      ".pkg",
+      ".apk",
+      ".ipa",
       // Media
-      '.mp4', '.mp3', '.wav', '.avi', '.mov', '.wmv', '.flv', '.webm', '.mkv', '.m4v',
-      '.aac', '.ogg', '.flac', '.m4a', '.wma'
+      ".mp4",
+      ".mp3",
+      ".wav",
+      ".avi",
+      ".mov",
+      ".wmv",
+      ".flv",
+      ".webm",
+      ".mkv",
+      ".m4v",
+      ".aac",
+      ".ogg",
+      ".flac",
+      ".m4a",
+      ".wma",
     ];
-    
-    return binaryExtensions.some(ext => path.toLowerCase().endsWith(ext));
+
+    return binaryExtensions.some((ext) => path.toLowerCase().endsWith(ext));
   }
 
   /**
@@ -261,19 +421,20 @@ export class GitHubArchiveService {
    */
   async getBranches(owner: string, repo: string): Promise<string[]> {
     try {
-      const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/branches`);
-      
+      const response = await fetch(
+        `https://api.github.com/repos/${owner}/${repo}/branches`
+      );
+
       if (!response.ok) {
         throw new Error(`Failed to fetch branches: ${response.status}`);
       }
-      
+
       const branches = await response.json();
       return branches.map((branch: any) => branch.name);
-      
     } catch (error) {
-      console.error('Error fetching branches:', error);
+      console.error("Error fetching branches:", error);
       // Fallback to common branch names
-      return ['main', 'master', 'develop'];
+      return ["main", "master", "develop"];
     }
   }
 
@@ -282,7 +443,9 @@ export class GitHubArchiveService {
    */
   async checkRepositoryAccess(owner: string, repo: string): Promise<boolean> {
     try {
-      const response = await fetch(`https://api.github.com/repos/${owner}/${repo}`);
+      const response = await fetch(
+        `https://api.github.com/repos/${owner}/${repo}`
+      );
       return response.ok;
     } catch {
       return false;
@@ -294,15 +457,16 @@ export class GitHubArchiveService {
    */
   async estimateRepositorySize(owner: string, repo: string): Promise<number> {
     try {
-      const response = await fetch(`https://api.github.com/repos/${owner}/${repo}`);
-      
+      const response = await fetch(
+        `https://api.github.com/repos/${owner}/${repo}`
+      );
+
       if (!response.ok) {
         return 0;
       }
-      
+
       const repoData = await response.json();
       return repoData.size || 0; // Size in KB
-      
     } catch {
       return 0;
     }
