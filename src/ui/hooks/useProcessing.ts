@@ -1,5 +1,8 @@
-import { useState, useCallback } from 'react';
-import { IngestionService, type IngestionResult } from '../../services/ingestion.service';
+import { useState, useCallback } from "react";
+import {
+  IngestionService,
+  type IngestionResult,
+} from "../../services/ingestion.service";
 
 interface ProcessingState {
   isProcessing: boolean;
@@ -22,91 +25,150 @@ interface UseProcessingReturn {
 export const useProcessing = (): UseProcessingReturn => {
   const [state, setState] = useState<ProcessingState>({
     isProcessing: false,
-    progress: '',
-    error: '',
-    result: null
+    progress: "",
+    error: "",
+    result: null,
   });
-  
-  const ingestionService = new IngestionService();
-  
+
   const updateState = useCallback((updates: Partial<ProcessingState>) => {
-    setState(prev => ({ ...prev, ...updates }));
+    setState((prev) => ({ ...prev, ...updates }));
   }, []);
-  
-  const processGitHubRepo = useCallback(async (
-    url: string, 
-    token?: string
-  ) => {
-    try {
-      updateState({
-        isProcessing: true,
-        progress: 'Starting GitHub repository processing...',
-        error: '',
-        result: null
-      });
-      
-      console.log('🚀 useProcessing: Starting GitHub processing for:', url);
-      
-      const result = await ingestionService.processGitHubRepository(url, token);
-      
-      updateState({
-        isProcessing: false,
-        progress: '',
-        result
-      });
-      console.log('✅ useProcessing: GitHub processing completed successfully');
-    } catch (error) {
-      updateState({
-        isProcessing: false,
-        progress: '',
-        error: error instanceof Error ? error.message : 'Unknown error occurred'
-      });
-      console.error('❌ useProcessing: GitHub processing error:', error);
-    }
-  }, [ingestionService, updateState]);
-  
-  const processZipFile = useCallback(async (file: File) => {
-    try {
-      updateState({
-        isProcessing: true,
-        progress: 'Starting ZIP file processing...',
-        error: '',
-        result: null
-      });
-      
-      console.log('🚀 useProcessing: Starting ZIP processing for:', file.name);
-      
-      const result = await ingestionService.processZipFile(file);
-      
-      updateState({
-        isProcessing: false,
-        progress: '',
-        result
-      });
-      console.log('✅ useProcessing: ZIP processing completed successfully');
-    } catch (error) {
-      updateState({
-        isProcessing: false,
-        progress: '',
-        error: error instanceof Error ? error.message : 'Unknown error occurred'
-      });
-      console.error('❌ useProcessing: ZIP processing error:', error);
-    }
-  }, [ingestionService, updateState]);
-  
+
+  const processGitHubRepo = useCallback(
+    async (url: string, token?: string) => {
+      try {
+        updateState({
+          isProcessing: true,
+          progress: "Starting GitHub repository processing...",
+          error: "",
+          result: null,
+        });
+
+        console.log("🚀 useProcessing: Starting GitHub processing for:", url);
+
+        // Get GitHub access token from backend session or use provided token
+        let githubToken = token;
+
+        if (!githubToken) {
+          // Try to get token from backend session
+          const sessionToken = localStorage.getItem("github_session_token");
+
+          if (sessionToken) {
+            try {
+              const API_BASE_URL =
+                import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
+              const response = await fetch(
+                `${API_BASE_URL}/integrations/github/me`,
+                {
+                  credentials: "include",
+                  headers: {
+                    "X-Session-Token": sessionToken,
+                  },
+                }
+              );
+
+              if (response.ok) {
+                const data = await response.json();
+                githubToken = data.accessToken;
+                console.log(
+                  "✅ Retrieved GitHub access token from backend session"
+                );
+              }
+            } catch (err) {
+              console.warn(
+                "⚠️ Could not retrieve GitHub token from backend:",
+                err
+              );
+            }
+          }
+        }
+
+        // Create ingestion service with token
+        const ingestionService = new IngestionService(githubToken);
+
+        const result = await ingestionService.processGitHubRepo(url, {
+          onProgress: (message: string) => {
+            updateState({ progress: message });
+          },
+        });
+
+        updateState({
+          isProcessing: false,
+          progress: "",
+          result,
+        });
+        console.log(
+          "✅ useProcessing: GitHub processing completed successfully"
+        );
+      } catch (error) {
+        updateState({
+          isProcessing: false,
+          progress: "",
+          error:
+            error instanceof Error ? error.message : "Unknown error occurred",
+        });
+        console.error("❌ useProcessing: GitHub processing error:", error);
+      }
+    },
+    [updateState]
+  );
+
+  const processZipFile = useCallback(
+    async (file: File) => {
+      try {
+        updateState({
+          isProcessing: true,
+          progress: "Starting ZIP file processing...",
+          error: "",
+          result: null,
+        });
+
+        console.log(
+          "🚀 useProcessing: Starting ZIP processing for:",
+          file.name
+        );
+
+        // Create ingestion service (no token needed for ZIP files)
+        const ingestionService = new IngestionService();
+
+        const result = await ingestionService.processZipFile(file, {
+          onProgress: (message: string) => {
+            updateState({ progress: message });
+          },
+        });
+
+        updateState({
+          isProcessing: false,
+          progress: "",
+          result,
+        });
+        console.log("✅ useProcessing: ZIP processing completed successfully");
+      } catch (error) {
+        updateState({
+          isProcessing: false,
+          progress: "",
+          error:
+            error instanceof Error ? error.message : "Unknown error occurred",
+        });
+        console.error("❌ useProcessing: ZIP processing error:", error);
+      }
+    },
+    [updateState]
+  );
+
   const clearError = useCallback(() => {
-    updateState({ error: '' });
+    updateState({ error: "" });
   }, [updateState]);
-  
+
   const clearResult = useCallback(() => {
     updateState({ result: null });
   }, [updateState]);
-  
+
   return {
     state,
     processGitHubRepo,
     processZipFile,
     clearError,
-    clearResult
+    clearResult,
   };
 };
