@@ -54,6 +54,9 @@ export const useProcessing = (): UseProcessingReturn => {
           const sessionToken = localStorage.getItem("github_session_token");
 
           if (sessionToken) {
+            console.log(
+              "📝 Found session token in localStorage, fetching GitHub access token from backend..."
+            );
             try {
               const API_BASE_URL =
                 import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
@@ -71,16 +74,37 @@ export const useProcessing = (): UseProcessingReturn => {
                 const data = await response.json();
                 githubToken = data.accessToken;
                 console.log(
-                  "✅ Retrieved GitHub access token from backend session"
+                  `✅ Retrieved GitHub access token from backend session (${githubToken?.substring(
+                    0,
+                    8
+                  )}...)`
+                );
+              } else {
+                console.error(
+                  "❌ Failed to fetch GitHub token from backend:",
+                  response.status,
+                  response.statusText
                 );
               }
             } catch (err) {
-              console.warn(
-                "⚠️ Could not retrieve GitHub token from backend:",
+              console.error(
+                "❌ Error retrieving GitHub token from backend:",
                 err
               );
             }
+          } else {
+            console.warn(
+              "⚠️ No session token found in localStorage - will use unauthenticated GitHub API (60 requests/hour)"
+            );
           }
+        } else {
+          console.log("✅ Using provided GitHub token");
+        }
+
+        if (!githubToken) {
+          console.warn(
+            "⚠️⚠️⚠️ IMPORTANT: No GitHub token available! API calls will be UNAUTHENTICATED (60 requests/hour limit)"
+          );
         }
 
         // Create ingestion service with token

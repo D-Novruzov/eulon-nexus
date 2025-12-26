@@ -325,8 +325,16 @@ app.get("/auth/github/callback", async (req: Request, res: Response) => {
 
     const accessToken = tokenResponse.data.access_token as string | undefined;
     if (!accessToken) {
+      console.error("❌ GitHub OAuth: No access token in response");
       return res.status(500).send("Failed to obtain GitHub access token");
     }
+
+    console.log(
+      `✅ GitHub OAuth: Obtained access token (${accessToken.substring(
+        0,
+        8
+      )}...)`
+    );
 
     const userResponse = await axios.get<GitHubUser>(
       "https://api.github.com/user",
@@ -338,8 +346,14 @@ app.get("/auth/github/callback", async (req: Request, res: Response) => {
       }
     );
 
+    console.log(
+      `✅ GitHub OAuth: Fetched user data for ${userResponse.data.login}`
+    );
+
     req.session.githubAccessToken = accessToken;
     req.session.githubUser = userResponse.data;
+
+    console.log("💾 Storing access token and user data in session...");
 
     // Ensure session is saved before redirecting
     await new Promise<void>((resolve, reject) => {
@@ -443,6 +457,14 @@ app.get("/integrations/github/me", (req: Request, res: Response) => {
   if (!session) return;
 
   console.log("Session check passed, returning user data");
+  console.log(
+    `🔑 Returning GitHub access token: ${
+      session.githubAccessToken
+        ? session.githubAccessToken.substring(0, 8) + "..."
+        : "MISSING"
+    }`
+  );
+
   res.json({
     connected: true,
     user: session.githubUser,

@@ -53,6 +53,20 @@ export class GitHubService {
   private rateLimitInfo: RateLimitInfo | null = null;
 
   constructor(token?: string) {
+    // Log authentication status for debugging
+    if (token) {
+      console.log(
+        `🔑 GitHubService: Initializing with authentication token (${token.substring(
+          0,
+          8
+        )}...)`
+      );
+    } else {
+      console.warn(
+        "⚠️ GitHubService: Initializing WITHOUT authentication token - rate limit will be 60/hour instead of 5000/hour"
+      );
+    }
+
     this.client = axios.create({
       baseURL: this.baseURL,
       headers: {
@@ -137,6 +151,16 @@ export class GitHubService {
         reset: parseInt(headers["x-ratelimit-reset"], 10),
         used: parseInt(headers["x-ratelimit-used"], 10),
       };
+
+      // Detect authentication status from rate limit
+      const isAuthenticated = rateLimitInfo.limit >= 5000;
+      if (!isAuthenticated && rateLimitInfo.limit === 60) {
+        console.warn(
+          `⚠️ GitHub API: Using UNAUTHENTICATED rate limit (${rateLimitInfo.remaining}/${rateLimitInfo.limit}). ` +
+            `Token may not be attached to requests!`
+        );
+      }
+
       // Update both instance and global tracking
       this.rateLimitInfo = rateLimitInfo;
       globalRateLimitInfo = rateLimitInfo;
