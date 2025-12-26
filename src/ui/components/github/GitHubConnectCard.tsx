@@ -11,6 +11,7 @@ interface GitHubMeResponse {
     name?: string;
     avatar_url?: string;
   };
+  accessToken?: string; // GitHub access token for API calls
 }
 
 const API_BASE_URL =
@@ -62,10 +63,21 @@ const GitHubConnectCard: React.FC<GitHubConnectCardProps> = ({
       if (data.connected) {
         setIsConnected(true);
         setUser(data.user);
+
+        // Store the GitHub access token for authenticated API calls
+        if (data.accessToken) {
+          sessionStorage.setItem("github_access_token", data.accessToken);
+          console.log(
+            "🔑 Stored GitHub access token for authenticated requests"
+          );
+        }
+
         onConnected();
       } else {
         setIsConnected(false);
         setUser(undefined);
+        // Clear stored tokens if not connected
+        sessionStorage.removeItem("github_access_token");
       }
     } catch (e) {
       console.error("Failed to refresh GitHub auth status", e);

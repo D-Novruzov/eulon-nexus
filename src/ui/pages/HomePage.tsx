@@ -72,10 +72,24 @@ const HomePage: React.FC = () => {
   const [githubImportMessage, setGitHubImportMessage] = useState<string | null>(
     null
   );
-  const [services] = useState(() => ({
-    ingestion: new IngestionService(),
-    llm: new LLMService(),
-  }));
+  // Create LLM service once (doesn't need token updates)
+  const [llmService] = useState(() => new LLMService());
+
+  // Helper to get current GitHub access token from session or localStorage
+  const getGitHubAccessToken = useCallback(() => {
+    // Try to get from session storage (set after OAuth - this is the actual access token)
+    const accessToken = sessionStorage.getItem("github_access_token");
+    if (accessToken) {
+      return accessToken;
+    }
+    // Fall back to localStorage (legacy)
+    const legacyToken = localStorage.getItem("github_session_token");
+    if (legacyToken) {
+      return legacyToken;
+    }
+    // Fall back to state
+    return state.githubToken || undefined;
+  }, [state.githubToken]);
 
   // Use settings hook for LLM configuration
   const {
@@ -119,7 +133,9 @@ const HomePage: React.FC = () => {
 
       console.log("Starting ZIP processing...", file.name);
 
-      const result = await services.ingestion.processZipFile(file, {
+      // Create ingestion service (no token needed for ZIP files)
+      const ingestionService = new IngestionService();
+      const result = await ingestionService.processZipFile(file, {
         directoryFilter: state.directoryFilter,
         fileExtensions: state.fileExtensions,
       });
@@ -165,6 +181,17 @@ const HomePage: React.FC = () => {
         showWelcome: false,
       });
 
+      // Get current GitHub access token
+      const githubToken = getGitHubAccessToken();
+      console.log(
+        `🔑 Using GitHub token for repo processing: ${
+          githubToken ? "YES" : "NO"
+        }`
+      );
+
+      // Create ingestion service with GitHub token for authenticated requests
+      const ingestionService = new IngestionService(githubToken);
+
       for (const repo of repos) {
         const url = `https://github.com/${repo.owner}/${repo.name}`;
 
@@ -173,7 +200,7 @@ const HomePage: React.FC = () => {
           progress: `Processing ${repo.fullName || url}...`,
         });
 
-        const result = await services.ingestion.processGitHubRepo(url, {
+        const result = await ingestionService.processGitHubRepo(url, {
           directoryFilter: state.directoryFilter,
           fileExtensions: state.fileExtensions,
           onProgress: (message: string) => {
@@ -287,12 +314,12 @@ const HomePage: React.FC = () => {
     if (settings.llmProvider === "azure-openai") {
       // For Azure OpenAI, we need to validate all required fields
       return (
-        services.llm.validateApiKey(settings.llmProvider, currentApiKey) &&
+        llmService.validateApiKey(settings.llmProvider, currentApiKey) &&
         settings.azureOpenAIEndpoint.trim() !== "" &&
         settings.azureOpenAIDeploymentName.trim() !== ""
       );
     }
-    return services.llm.validateApiKey(settings.llmProvider, currentApiKey);
+    return llmService.validateApiKey(settings.llmProvider, currentApiKey);
   })();
   const isGraphValid =
     state.graph &&
@@ -570,11 +597,17 @@ const HomePage: React.FC = () => {
   const renderWelcomeScreen = () => (
     <div style={styles.welcomeOverlay}>
       <div style={styles.welcomeCard}>
-        <div style={{...styles.welcomeTitle}} className="welcome-title-responsive">
+        <div
+          style={{ ...styles.welcomeTitle }}
+          className="welcome-title-responsive"
+        >
           <span>🔍</span>
           <span>EulonAI</span>
         </div>
-        <div style={{...styles.welcomeSubtitle}} className="welcome-subtitle-responsive">
+        <div
+          style={{ ...styles.welcomeSubtitle }}
+          className="welcome-subtitle-responsive"
+        >
           Transform your codebase into an interactive knowledge graph
         </div>
 
@@ -629,7 +662,7 @@ const HomePage: React.FC = () => {
 
         <button
           onClick={() => updateState({ showSettings: true })}
-          style={{...styles.secondaryButton, marginTop: "6px"}}
+          style={{ ...styles.secondaryButton, marginTop: "6px" }}
           className="button-responsive"
         >
           ⚙️ Settings
@@ -652,7 +685,10 @@ const HomePage: React.FC = () => {
       <>
         {/* Top Navbar */}
         <div style={styles.navbar} className="navbar-responsive">
-          <div style={styles.navbarContent} className="navbar-content-responsive">
+          <div
+            style={styles.navbarContent}
+            className="navbar-content-responsive"
+          >
             <span>🔍 EulonAI</span>
             <span>•</span>
             <span>{state.graph?.nodes.length || 0} nodes</span>
@@ -699,8 +735,8 @@ const HomePage: React.FC = () => {
               <span>📥</span>
               Download KG
             </button>
-            <button 
-              onClick={handleNewProject} 
+            <button
+              onClick={handleNewProject}
               style={styles.navbarButton}
               className="navbar-button-responsive"
             >
