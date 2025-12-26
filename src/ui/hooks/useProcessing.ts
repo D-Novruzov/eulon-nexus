@@ -101,13 +101,22 @@ export const useProcessing = (): UseProcessingReturn => {
           "✅ useProcessing: GitHub processing completed successfully"
         );
       } catch (error) {
+        // Enhanced error message for rate limiting
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown error occurred";
+
+        // Check if it's a rate limit error and provide helpful context
+        if (errorMessage.includes("rate limit")) {
+          console.error("❌ GitHub API Rate Limit Hit:", error);
+        } else {
+          console.error("❌ useProcessing: GitHub processing error:", error);
+        }
+
         updateState({
           isProcessing: false,
           progress: "",
-          error:
-            error instanceof Error ? error.message : "Unknown error occurred",
+          error: errorMessage,
         });
-        console.error("❌ useProcessing: GitHub processing error:", error);
       }
     },
     [updateState]

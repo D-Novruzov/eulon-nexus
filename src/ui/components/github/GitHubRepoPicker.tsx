@@ -1,5 +1,6 @@
 // @ts-nocheck
 import React, { useEffect, useState } from "react";
+import { GitHubService } from "../../../services/github";
 
 interface NormalizedRepo {
   id: number;
@@ -31,10 +32,14 @@ const GitHubRepoPicker: React.FC<GitHubRepoPickerProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [rateLimitStatus, setRateLimitStatus] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
     void loadRepos();
+    // Check and display rate limit status
+    const status = GitHubService.getGlobalRateLimitStatus();
+    setRateLimitStatus(status);
   }, [isOpen]);
 
   const loadRepos = async () => {
@@ -90,10 +95,26 @@ const GitHubRepoPicker: React.FC<GitHubRepoPickerProps> = ({
   const handleImport = async () => {
     const selected = repos.filter((r) => selectedIds.has(r.id));
     if (selected.length === 0) return;
+
+    // Check if rate limited before starting import
+    if (GitHubService.isGloballyRateLimited()) {
+      const status = GitHubService.getGlobalRateLimitStatus();
+      setError(
+        status ||
+          "GitHub API rate limit exceeded. Please wait before importing."
+      );
+      return;
+    }
+
     try {
       setIsImporting(true);
       setError(null);
       await onImport(selected);
+
+      // Update rate limit status after import
+      const status = GitHubService.getGlobalRateLimitStatus();
+      setRateLimitStatus(status);
+
       onClose();
     } catch (e) {
       console.error("GitHub import failed", e);
@@ -102,6 +123,10 @@ const GitHubRepoPicker: React.FC<GitHubRepoPickerProps> = ({
           ? e.message
           : "Failed to import repositories. Check permissions and rate limits."
       );
+
+      // Update rate limit status on error too
+      const status = GitHubService.getGlobalRateLimitStatus();
+      setRateLimitStatus(status);
     } finally {
       setIsImporting(false);
     }
@@ -126,6 +151,17 @@ const GitHubRepoPicker: React.FC<GitHubRepoPickerProps> = ({
               Choose one or more repositories to import into your knowledge
               graph.
             </p>
+            {rateLimitStatus && (
+              <div
+                className={`gh-rate-limit-status ${
+                  rateLimitStatus.includes("⚠️")
+                    ? "gh-rate-limit-warning"
+                    : "gh-rate-limit-info"
+                }`}
+              >
+                {rateLimitStatus}
+              </div>
+            )}
           </div>
           <button className="gh-close-button" onClick={onClose}>
             ✕
@@ -264,6 +300,26 @@ const GitHubRepoPicker: React.FC<GitHubRepoPickerProps> = ({
             margin: 0.25rem 0 0;
             font-size: 0.85rem;
             color: #9ca3af;
+          }
+
+          .gh-rate-limit-status {
+            margin: 0.5rem 0 0;
+            padding: 0.5rem;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 500;
+          }
+
+          .gh-rate-limit-info {
+            background: rgba(34, 211, 238, 0.1);
+            color: #22d3ee;
+            border: 1px solid rgba(34, 211, 238, 0.3);
+          }
+
+          .gh-rate-limit-warning {
+            background: rgba(251, 191, 36, 0.1);
+            color: #fbbf24;
+            border: 1px solid rgba(251, 191, 36, 0.3);
           }
 
           .gh-close-button {

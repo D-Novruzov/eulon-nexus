@@ -44,6 +44,9 @@ export interface CompleteRepositoryStructure {
   fileContents: Map<string, string>; // Only files with content
 }
 
+// Global rate limit tracking (shared across all GitHubService instances)
+let globalRateLimitInfo: RateLimitInfo | null = null;
+
 export class GitHubService {
   private client: AxiosInstance;
   private baseURL = "https://api.github.com";
@@ -59,6 +62,9 @@ export class GitHubService {
       timeout: 30000,
     });
 
+    // Initialize from global rate limit tracking
+    this.rateLimitInfo = globalRateLimitInfo;
+
     this.setupInterceptors();
   }
 
@@ -72,10 +78,34 @@ export class GitHubService {
         if (error.response) {
           this.updateRateLimitInfo(error.response);
 
-          if (error.response.status === 403 && this.isRateLimited()) {
-            const resetTime = new Date(this.rateLimitInfo!.reset * 1000);
+          if (error.response.status === 403) {
+            const rateLimitHeader =
+              error.response.headers["x-ratelimit-remaining"];
+
+            // Check if this is a rate limit error
+            if (rateLimitHeader === "0" || this.isRateLimited()) {
+              const resetTime = new Date(this.rateLimitInfo!.reset * 1000);
+              const now = new Date();
+              const waitMinutes = Math.ceil(
+                (resetTime.getTime() - now.getTime()) / 60000
+              );
+
+              throw new Error(
+                `GitHub API rate limit exceeded!\n\n` +
+                  `You've used all ${
+                    this.rateLimitInfo!.limit
+                  } requests per hour.\n` +
+                  `Rate limit resets in ${waitMinutes} minutes at ${resetTime.toLocaleTimeString()}.\n\n` +
+                  `Tips to avoid this:\n` +
+                  `• Wait ${waitMinutes} minutes before importing another repository\n` +
+                  `• Authenticate with GitHub for higher limits (5000/hour vs 60/hour)\n` +
+                  `• Import smaller repositories or fewer repositories at once`
+              );
+            }
+
+            // Other 403 errors
             throw new Error(
-              `GitHub API rate limit exceeded. Resets at ${resetTime.toISOString()}`
+              "GitHub API access forbidden. This could be due to insufficient permissions or rate limiting."
             );
           }
 
@@ -101,12 +131,15 @@ export class GitHubService {
   private updateRateLimitInfo(response: AxiosResponse): void {
     const headers = response.headers;
     if (headers["x-ratelimit-limit"]) {
-      this.rateLimitInfo = {
+      const rateLimitInfo = {
         limit: parseInt(headers["x-ratelimit-limit"], 10),
         remaining: parseInt(headers["x-ratelimit-remaining"], 10),
         reset: parseInt(headers["x-ratelimit-reset"], 10),
         used: parseInt(headers["x-ratelimit-used"], 10),
       };
+      // Update both instance and global tracking
+      this.rateLimitInfo = rateLimitInfo;
+      globalRateLimitInfo = rateLimitInfo;
     }
   }
 
@@ -118,6 +151,24 @@ export class GitHubService {
     return this.rateLimitInfo;
   }
 
+  /**
+   * Get human-readable rate limit status
+   */
+  public getRateLimitStatus(): string | null {
+    if (!this.rateLimitInfo) {
+      return null;
+    }
+
+    const { limit, remaining, reset } = this.rateLimitInfo;
+    const resetTime = new Date(reset * 1000);
+    const now = new Date();
+    const minutesUntilReset = Math.ceil(
+      (resetTime.getTime() - now.getTime()) / 60000
+    );
+
+    return `GitHub API: ${remaining}/${limit} requests remaining (resets in ${minutesUntilReset} minutes)`;
+  }
+
   public async checkRateLimit(): Promise<void> {
     if (this.isRateLimited()) {
       const resetTime = new Date(this.rateLimitInfo!.reset * 1000);
@@ -127,10 +178,24 @@ export class GitHubService {
         const waitTime = Math.ceil(
           (resetTime.getTime() - now.getTime()) / 1000
         );
+        const waitMinutes = Math.ceil(waitTime / 60);
         throw new Error(
-          `Rate limit exceeded. Wait ${waitTime} seconds before making another request.`
+          `GitHub API rate limit exceeded. You've used all ${
+            this.rateLimitInfo!.limit
+          } requests. ` +
+            `Please wait ${waitMinutes} minutes (${waitTime} seconds) before trying again. ` +
+            `Rate limit resets at ${resetTime.toLocaleTimeString()}.`
         );
       }
+    }
+
+    // Warn if running low on requests
+    if (this.rateLimitInfo && this.rateLimitInfo.remaining < 10) {
+      const status = this.getRateLimitStatus();
+      console.warn(`⚠️ ${status}`);
+      console.warn(
+        `⚠️ Running low on GitHub API requests. Consider waiting before importing more repositories.`
+      );
     }
   }
 
@@ -341,6 +406,12 @@ export class GitHubService {
     owner: string,
     repo: string
   ): Promise<CompleteRepositoryStructure> {
+    // Log rate limit status at the start
+    const rateLimitStatus = this.getRateLimitStatus();
+    if (rateLimitStatus) {
+      console.log(`📊 ${rateLimitStatus}`);
+    }
+
     // Ensure ignore patterns are initialized before traversal so we can prune early
     try {
       await ignoreService.initialize();
@@ -366,6 +437,12 @@ export class GitHubService {
       console.log(
         `GitHub: Extracted ${allPaths.length} paths, ${fileContents.size} files`
       );
+
+      // Log final rate limit status
+      const finalRateLimitStatus = this.getRateLimitStatus();
+      if (finalRateLimitStatus) {
+        console.log(`📊 ${finalRateLimitStatus}`);
+      }
 
       // Validate we got some files
       if (allPaths.length === 0) {
@@ -475,5 +552,44 @@ export class GitHubService {
       authenticated: !!authHeader,
       rateLimitInfo: this.rateLimitInfo,
     };
+  }
+
+  /**
+   * Static method to get the global rate limit info
+   * This is useful for checking rate limits before creating a new instance
+   */
+  public static getGlobalRateLimitInfo(): RateLimitInfo | null {
+    return globalRateLimitInfo;
+  }
+
+  /**
+   * Static method to get human-readable global rate limit status
+   */
+  public static getGlobalRateLimitStatus(): string | null {
+    if (!globalRateLimitInfo) {
+      return null;
+    }
+
+    const { limit, remaining, reset } = globalRateLimitInfo;
+    const resetTime = new Date(reset * 1000);
+    const now = new Date();
+    const minutesUntilReset = Math.ceil(
+      (resetTime.getTime() - now.getTime()) / 60000
+    );
+
+    if (remaining === 0) {
+      return `⚠️ GitHub API rate limit exhausted! Resets in ${minutesUntilReset} minutes at ${resetTime.toLocaleTimeString()}`;
+    } else if (remaining < 10) {
+      return `⚠️ Low on GitHub API requests: ${remaining}/${limit} remaining (resets in ${minutesUntilReset} minutes)`;
+    } else {
+      return `GitHub API: ${remaining}/${limit} requests remaining (resets in ${minutesUntilReset} minutes)`;
+    }
+  }
+
+  /**
+   * Static method to check if rate limited globally
+   */
+  public static isGloballyRateLimited(): boolean {
+    return globalRateLimitInfo !== null && globalRateLimitInfo.remaining === 0;
   }
 }
