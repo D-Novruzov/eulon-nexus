@@ -67,45 +67,61 @@ export class GitHubArchiveService {
 
       let response: Response;
 
-      // Try backend proxy first if available (better for authenticated downloads)
-      if (useBackendProxy && accessToken) {
-        console.log(
-          "📦 Using backend proxy for authenticated archive download"
+      // Strategy: Try backend proxy first (no CORS issues), then fall back to CORS proxy
+      // Backend proxy can download directly from GitHub without CORS restrictions
+
+      // Try 1: Backend proxy (works best, no CORS issues)
+      try {
+        console.log("📦 Attempting backend proxy for archive download...");
+        response = await fetch(
+          `${backendUrl}/integrations/github/archive/${owner}/${repo}/${branch}`,
+          {
+            headers: accessToken ? { "X-Session-Token": accessToken } : {},
+            credentials: "include",
+            timeout: 60000,
+          } as RequestInit
         );
+
+        if (response.ok) {
+          console.log("✅ Backend proxy download successful");
+        } else {
+          throw new Error(`Backend proxy returned ${response.status}`);
+        }
+      } catch (backendError) {
+        console.warn(
+          "⚠️ Backend proxy failed, trying direct download:",
+          backendError
+        );
+
+        // Try 2: Direct download from GitHub (works for public repos)
         try {
-          response = await fetch(
-            `${backendUrl}/integrations/github/archive/${owner}/${repo}/${branch}`,
-            {
-              headers: {
-                "X-Session-Token": accessToken,
-              },
-              credentials: "include",
-            }
+          console.log("📦 Attempting direct download from GitHub...");
+          const archiveUrl = `https://github.com/${owner}/${repo}/archive/refs/heads/${branch}.zip`;
+          response = await fetch(archiveUrl, {
+            headers: accessToken
+              ? { Authorization: `Bearer ${accessToken}` }
+              : {},
+          });
+
+          if (response.ok) {
+            console.log("✅ Direct download successful");
+          } else {
+            throw new Error(`Direct download returned ${response.status}`);
+          }
+        } catch (directError) {
+          console.warn(
+            "⚠️ Direct download failed, trying CORS proxy:",
+            directError
           );
 
-          if (!response.ok) {
-            throw new Error(`Backend proxy failed: ${response.status}`);
-          }
-        } catch (error) {
-          console.warn(
-            "⚠️ Backend proxy failed, falling back to CORS proxy:",
-            error
-          );
-          // Fall back to CORS proxy
+          // Try 3: CORS proxy as last resort
+          console.log("📦 Attempting CORS proxy download...");
           const archiveUrl = `https://github.com/${owner}/${repo}/archive/refs/heads/${branch}.zip`;
           response = await this.proxyService.downloadWithProxy(archiveUrl, {
             useProxy: true,
             timeout: 60000,
           });
         }
-      } else {
-        // Use CORS proxy for public repositories
-        console.log("📦 Using CORS proxy for archive download");
-        const archiveUrl = `https://github.com/${owner}/${repo}/archive/refs/heads/${branch}.zip`;
-        response = await this.proxyService.downloadWithProxy(archiveUrl, {
-          useProxy: true,
-          timeout: 60000, // 60 second timeout for archive downloads
-        });
       }
 
       if (!response.ok) {
@@ -228,15 +244,25 @@ export class GitHubArchiveService {
       // Remove the repository name prefix from path
       const cleanPath = this.cleanArchivePath(path);
 
-      // Skip binary files and large files
-      if (
-        this.isBinaryFile(cleanPath) ||
-        file._data.uncompressedSize > 1024 * 1024
-      ) {
+      // Skip binary files
+      if (this.isBinaryFile(cleanPath)) {
         return 0;
       }
 
       const content = await file.async("string");
+
+      // Skip files larger than 1MB after decompression
+      if (content.length > 1024 * 1024) {
+        console.warn(
+          `Skipping large file ${cleanPath} (${(
+            content.length /
+            1024 /
+            1024
+          ).toFixed(2)}MB)`
+        );
+        return 0;
+      }
+
       fileContents.set(cleanPath, content);
       allPaths.push(cleanPath);
 
@@ -429,8 +455,8 @@ export class GitHubArchiveService {
         throw new Error(`Failed to fetch branches: ${response.status}`);
       }
 
-      const branches = await response.json();
-      return branches.map((branch: any) => branch.name);
+      const branches = (await response.json()) as Array<{ name: string }>;
+      return branches.map((branch) => branch.name);
     } catch (error) {
       console.error("Error fetching branches:", error);
       // Fallback to common branch names

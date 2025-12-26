@@ -585,17 +585,34 @@ app.post("/integrations/github/import", async (req: Request, res: Response) => {
  * GET /integrations/github/archive/:owner/:repo/:branch
  * Download repository as ZIP archive
  * This is much faster than individual API calls (only 1 request!)
+ * Works for both authenticated and unauthenticated requests (public repos)
  */
 app.get(
   "/integrations/github/archive/:owner/:repo/:branch",
   async (req: Request, res: Response) => {
-    const session = requireSession(req, res);
-    if (!session) return;
-
     const { owner, repo, branch } = req.params;
 
     if (!owner || !repo || !branch) {
       return res.status(400).json({ error: "Missing required parameters" });
+    }
+
+    // Try to get session for authenticated requests, but don't require it
+    let accessToken: string | undefined;
+    const sessionToken = req.headers["x-session-token"] as string | undefined;
+
+    if (sessionToken && sessionTokens.has(sessionToken)) {
+      const tokenData = sessionTokens.get(sessionToken)!;
+      if (Date.now() <= tokenData.expiresAt) {
+        accessToken = tokenData.githubAccessToken;
+        console.log("📦 Using authenticated download for archive");
+      }
+    } else if (req.session?.githubAccessToken) {
+      accessToken = req.session.githubAccessToken;
+      console.log("📦 Using authenticated download for archive (session)");
+    } else {
+      console.log(
+        "📦 Using unauthenticated download for archive (public repo)"
+      );
     }
 
     try {
@@ -603,18 +620,28 @@ app.get(
 
       // Download the archive from GitHub
       const archiveUrl = `https://github.com/${owner}/${repo}/archive/refs/heads/${branch}.zip`;
+      const headers: Record<string, string> = {
+        "User-Agent": "GitNexus/1.0",
+      };
+
+      // Add authentication if available (for private repos or higher rate limits)
+      if (accessToken) {
+        headers["Authorization"] = `Bearer ${accessToken}`;
+      }
+
       const response = await axios.get(archiveUrl, {
-        headers: {
-          Authorization: `Bearer ${session.githubAccessToken}`,
-          Accept: "application/vnd.github.v3+json",
-        },
+        headers,
         responseType: "arraybuffer",
         maxContentLength: 100 * 1024 * 1024, // 100MB limit
         timeout: 60000, // 60 second timeout
       });
 
       const archiveSizeMB = (response.data.byteLength / 1024 / 1024).toFixed(2);
-      console.log(`✅ Downloaded ${archiveSizeMB}MB archive`);
+      console.log(
+        `✅ Downloaded ${archiveSizeMB}MB archive ${
+          accessToken ? "(authenticated)" : "(public)"
+        }`
+      );
 
       // Set appropriate headers
       res.setHeader("Content-Type", "application/zip");
@@ -635,9 +662,10 @@ app.get(
             .json({ error: "Repository or branch not found" });
         }
         if (error.response?.status === 403) {
-          return res
-            .status(403)
-            .json({ error: "Access denied or rate limit exceeded" });
+          return res.status(403).json({
+            error: "Access denied or rate limit exceeded",
+            hint: "Try authenticating with GitHub for higher rate limits",
+          });
         }
       }
       res.status(500).json({ error: "Failed to download repository archive" });
