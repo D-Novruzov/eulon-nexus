@@ -34,6 +34,7 @@ interface AppState {
   isLoading: boolean;
   showStats: boolean;
   showExportModal: boolean;
+  showHistory: boolean;
 
   // Input State
   directoryFilter: string;
@@ -58,6 +59,7 @@ const initialState: AppState = {
   isLoading: false,
   showStats: false,
   showExportModal: false,
+  showHistory: false,
   directoryFilter: "src,lib,components,pages,utils",
   fileExtensions:
     ".ts,.tsx,.js,.jsx,.py,.java,.cpp,.c,.cs,.php,.rb,.go,.rs,.swift,.kt,.scala,.clj,.hs,.ml,.fs,.elm,.dart,.lua,.r,.m,.sh,.sql,.html,.css,.scss,.less,.vue,.svelte",
@@ -730,6 +732,18 @@ const HomePage: React.FC = () => {
             className="navbar-buttons-responsive"
           >
             <button
+              onClick={() => updateState({ showHistory: true })}
+              style={{
+                ...styles.navbarButton,
+                backgroundColor: colors.surfaceWarm,
+                color: colors.text,
+              }}
+              className="navbar-button-responsive"
+            >
+              <span>🕒</span>
+              History
+            </button>
+            <button
               onClick={() => updateState({ showStats: !state.showStats })}
               style={{
                 ...styles.navbarButton,
@@ -1026,47 +1040,6 @@ const HomePage: React.FC = () => {
         {state.showWelcome || !isGraphValid
           ? renderWelcomeScreen()
           : renderMainInterface()}
-
-        {/* Commit History Section */}
-        {commitTimeline && commitTimeline.commits.length > 0 && (
-          <div
-            style={{
-              marginTop: "24px",
-              padding: "16px 24px",
-              backgroundColor: colors.surfaceWarm,
-              borderTop: `1px solid ${colors.borderLight}`,
-            }}
-          >
-            <h2
-              style={{
-                color: colors.text,
-                marginBottom: "12px",
-                fontSize: "20px",
-                fontWeight: 700,
-              }}
-            >
-              Repository Evolution
-            </h2>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-                gap: "16px",
-              }}
-            >
-              <ProjectEvolutionStats timeline={commitTimeline} />
-              <CommitHistoryViewer
-                timeline={commitTimeline}
-                isLoading={historyLoading}
-              />
-            </div>
-            {historyError && (
-              <div style={{ color: colors.textMuted, marginTop: "8px" }}>
-                ⚠️ Commit history error: {historyError}
-              </div>
-            )}
-          </div>
-        )}
 
         {/* Settings Modal */}
         {state.showSettings && (
@@ -1427,6 +1400,94 @@ const HomePage: React.FC = () => {
                 >
                   Cancel
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Commit History Modal */}
+        {state.showHistory && commitTimeline && (
+          <div
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: "rgba(0,0,0,0.5)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 2000,
+            }}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                updateState({ showHistory: false });
+              }
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                updateState({ showHistory: false });
+              }
+            }}
+            tabIndex={-1}
+          >
+            <div
+              style={{
+                backgroundColor: colors.surface,
+                borderRadius: "16px",
+                padding: "24px",
+                width: "95%",
+                maxWidth: "1200px",
+                maxHeight: "85vh",
+                overflow: "auto",
+                border: `1px solid ${colors.borderLight}`,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: "16px",
+                }}
+              >
+                <h2
+                  style={{
+                    color: colors.text,
+                    margin: 0,
+                    fontSize: "20px",
+                    fontWeight: 700,
+                  }}
+                >
+                  🕒 Repository Evolution
+                </h2>
+                <button
+                  onClick={() => updateState({ showHistory: false })}
+                  style={styles.secondaryButton}
+                >
+                  Close
+                </button>
+              </div>
+
+              {historyError && (
+                <div style={{ color: colors.textMuted, marginBottom: "12px" }}>
+                  ⚠️ Commit history error: {historyError}
+                </div>
+              )}
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))",
+                  gap: "16px",
+                }}
+              >
+                <ProjectEvolutionStats timeline={commitTimeline} />
+                <CommitHistoryViewer
+                  timeline={commitTimeline}
+                  isLoading={historyLoading}
+                />
               </div>
             </div>
           </div>
