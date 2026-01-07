@@ -7,6 +7,8 @@ import cookieParser from "cookie-parser";
 import session, { type Session } from "express-session";
 import crypto from "crypto";
 import axios from "axios";
+import analysisRoutes from "./routes/analysis.routes.js";
+import { graphStorageService } from "./services/graph-storage.service.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -754,6 +756,11 @@ app.get("/debug/test-cookie", (req: Request, res: Response) => {
   });
 });
 
-app.listen(port, () => {
+// Analysis routes for graph storage
+app.use("/api/analysis", analysisRoutes);
+
+app.listen(port, async () => {
+  // Initialize graph storage service
+  await graphStorageService.initialize();
   console.log(`Server listening on http://localhost:${port}`);
 });

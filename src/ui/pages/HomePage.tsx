@@ -22,6 +22,7 @@ import {
   ProjectEvolutionStats,
 } from "../components/index.ts";
 import { useCommitHistory } from "../hooks/useCommitHistory.ts";
+import { useGraphPersistence } from "../hooks/useGraphPersistence.ts";
 
 interface AppState {
   // Data
@@ -90,6 +91,19 @@ const HomePage: React.FC = () => {
     fetchCommitHistory,
   } = useCommitHistory();
 
+  // Graph persistence hook for storing graphs on the server
+  const {
+    storeGraph,
+    loadGraph,
+    fetchAllHistory,
+    fetchRepoHistory,
+    history: graphHistory,
+    currentRepoHistory,
+    isLoading: persistenceLoading,
+    isSaving: persistenceSaving,
+    error: persistenceError,
+  } = useGraphPersistence();
+
   // Helper to get current GitHub access token from session or localStorage
   const getGitHubAccessToken = useCallback(() => {
     // Try to get from session storage (set after OAuth - this is the actual access token)
@@ -128,6 +142,13 @@ const HomePage: React.FC = () => {
       localStorage.setItem("github_token", state.githubToken);
     }
   }, [state.githubToken]);
+
+  // Load graph history from server on startup
+  useEffect(() => {
+    fetchAllHistory().catch((err) => {
+      console.warn("Failed to load graph history:", err);
+    });
+  }, [fetchAllHistory]);
 
   const handleFileUpload = async (
     event: React.ChangeEvent<HTMLInputElement>
@@ -227,6 +248,26 @@ const HomePage: React.FC = () => {
           graph: result.graph,
           fileContents: result.fileContents,
         });
+
+        // Store graph on the server for persistence (non-blocking)
+        try {
+          updateState({ progress: "Saving graph to server..." });
+          // Use latest commit info if available, or default values
+          const latestCommit = commitTimeline?.commits?.[0];
+          await storeGraph(
+            repo.owner,
+            repo.name,
+            latestCommit?.sha || `import-${Date.now()}`,
+            latestCommit?.message || "Initial import",
+            latestCommit?.author?.date || new Date().toISOString(),
+            result.graph
+          );
+          console.log(
+            `✅ Graph stored on server for ${repo.owner}/${repo.name}`
+          );
+        } catch (e) {
+          console.warn("Graph persistence failed (non-critical):", e);
+        }
 
         // Fetch commit history for the imported repository (non-blocking)
         try {
