@@ -17,6 +17,11 @@ import type { ExportFormat } from "../components/ExportFormatModal.tsx";
 import { useSettings } from "../hooks/useSettings.ts";
 import GitHubConnectCard from "../components/github/GitHubConnectCard.tsx";
 import GitHubRepoPicker from "../components/github/GitHubRepoPicker.tsx";
+import {
+  CommitHistoryViewer,
+  ProjectEvolutionStats,
+} from "../components/index.ts";
+import { useCommitHistory } from "../hooks/useCommitHistory.ts";
 
 interface AppState {
   // Data
@@ -74,6 +79,14 @@ const HomePage: React.FC = () => {
   );
   // Create LLM service once (doesn't need token updates)
   const [llmService] = useState(() => new LLMService());
+
+  // Commit history hook (uses current GitHub token if available)
+  const {
+    timeline: commitTimeline,
+    isLoading: historyLoading,
+    error: historyError,
+    fetchCommitHistory,
+  } = useCommitHistory();
 
   // Helper to get current GitHub access token from session or localStorage
   const getGitHubAccessToken = useCallback(() => {
@@ -212,6 +225,16 @@ const HomePage: React.FC = () => {
           graph: result.graph,
           fileContents: result.fileContents,
         });
+
+        // Fetch commit history for the imported repository (non-blocking)
+        try {
+          await fetchCommitHistory(repo.owner, repo.name, {
+            maxCommits: 100,
+            includeDiffs: false,
+          });
+        } catch (e) {
+          console.warn("Commit history loading failed:", e);
+        }
       }
 
       updateState({
@@ -1003,6 +1026,47 @@ const HomePage: React.FC = () => {
         {state.showWelcome || !isGraphValid
           ? renderWelcomeScreen()
           : renderMainInterface()}
+
+        {/* Commit History Section */}
+        {commitTimeline && commitTimeline.commits.length > 0 && (
+          <div
+            style={{
+              marginTop: "24px",
+              padding: "16px 24px",
+              backgroundColor: colors.surfaceWarm,
+              borderTop: `1px solid ${colors.borderLight}`,
+            }}
+          >
+            <h2
+              style={{
+                color: colors.text,
+                marginBottom: "12px",
+                fontSize: "20px",
+                fontWeight: 700,
+              }}
+            >
+              Repository Evolution
+            </h2>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+                gap: "16px",
+              }}
+            >
+              <ProjectEvolutionStats timeline={commitTimeline} />
+              <CommitHistoryViewer
+                timeline={commitTimeline}
+                isLoading={historyLoading}
+              />
+            </div>
+            {historyError && (
+              <div style={{ color: colors.textMuted, marginTop: "8px" }}>
+                ⚠️ Commit history error: {historyError}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Settings Modal */}
         {state.showSettings && (
