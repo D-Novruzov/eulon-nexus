@@ -1,0 +1,22 @@
+[
+  {
+    "id": "test_test",
+    "repoFullName": "test/test",
+    "commits": [
+      {
+        "id": "test_test_abc123",
+        "repoOwner": "test",
+        "repoName": "test",
+        "commitSha": "abc123",
+        "commitNumber": 1,
+        "commitMessage": "test",
+        "commitDate": "2026-01-07",
+        "createdAt": "2026-01-07T10:11:08.015Z",
+        "nodeCount": 0,
+        "relationshipCount": 0,
+        "dbPath": "/Users/davitnovruzovi/Desktop/GitNexus/backend/data/graphs/test_test_abc123"
+      }
+    ],
+    "lastUpdated": "2026-01-07T10:11:08.015Z"
+  }
+]

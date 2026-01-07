@@ -11,7 +11,8 @@ import type {
   GraphRelationship,
 } from "../core/graph/types.ts";
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:4000";
+// Use relative URL in development (goes through Vite proxy), full URL in production
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "";
 
 export interface GraphMetadata {
   id: string;

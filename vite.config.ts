@@ -46,6 +46,14 @@ export default defineConfig({
     hmr: {
       overlay: false,
     },
+    // Proxy API requests to backend to avoid CORS/blocking issues
+    proxy: {
+      "/api/analysis": {
+        target: "http://localhost:4000",
+        changeOrigin: true,
+        secure: false,
+      },
+    },
   },
 
   define: {
