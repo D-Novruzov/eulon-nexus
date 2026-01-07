@@ -61,6 +61,22 @@ export class GraphPersistenceService {
   }
 
   /**
+   * Safely parse JSON response, handling empty or invalid responses
+   */
+  private async safeParseJSON(response: Response): Promise<any> {
+    const text = await response.text();
+    if (!text || text.trim() === "") {
+      return null;
+    }
+    try {
+      return JSON.parse(text);
+    } catch {
+      console.error("Failed to parse JSON response:", text.substring(0, 200));
+      return null;
+    }
+  }
+
+  /**
    * Store a graph for a specific commit
    */
   async storeGraph(
@@ -71,30 +87,46 @@ export class GraphPersistenceService {
     commitDate: string,
     graph: KnowledgeGraph
   ): Promise<GraphMetadata> {
+    const payload = {
+      owner,
+      repo,
+      commitSha,
+      commitMessage,
+      commitDate,
+      graph: {
+        nodes: graph.nodes,
+        relationships: graph.relationships,
+      },
+    };
+
+    // Log payload size for debugging
+    const payloadSize = JSON.stringify(payload).length;
+    console.log(
+      `📦 Storing graph: ${payloadSize} bytes, ${graph.nodes.length} nodes, ${graph.relationships.length} relationships`
+    );
+
     const response = await fetch(`${BACKEND_URL}/api/analysis/store`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        owner,
-        repo,
-        commitSha,
-        commitMessage,
-        commitDate,
-        graph: {
-          nodes: graph.nodes,
-          relationships: graph.relationships,
-        },
-      }),
+      body: JSON.stringify(payload),
     });
 
+    const result = await this.safeParseJSON(response);
+
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || "Failed to store graph");
+      const errorMsg =
+        result?.error ||
+        result?.details ||
+        `Server error: ${response.status} ${response.statusText}`;
+      throw new Error(errorMsg);
     }
 
-    const result = await response.json();
+    if (!result?.metadata) {
+      throw new Error("Invalid response: missing metadata");
+    }
+
     return result.metadata;
   }
 
@@ -103,14 +135,14 @@ export class GraphPersistenceService {
    */
   async getAllHistory(): Promise<AnalysisHistoryEntry[]> {
     const response = await fetch(`${BACKEND_URL}/api/analysis/history`);
+    const result = await this.safeParseJSON(response);
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || "Failed to get history");
+      const errorMsg = result?.error || `Server error: ${response.status}`;
+      throw new Error(errorMsg);
     }
 
-    const result = await response.json();
-    return result.history;
+    return result?.history || [];
   }
 
   /**
@@ -128,13 +160,14 @@ export class GraphPersistenceService {
       return null;
     }
 
+    const result = await this.safeParseJSON(response);
+
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || "Failed to get repository history");
+      const errorMsg = result?.error || `Server error: ${response.status}`;
+      throw new Error(errorMsg);
     }
 
-    const result = await response.json();
-    return result.history;
+    return result?.history || null;
   }
 
   /**
@@ -145,20 +178,40 @@ export class GraphPersistenceService {
     repo: string,
     commitSha: string
   ): Promise<KnowledgeGraph | null> {
+    console.log(
+      `📥 Loading graph for ${owner}/${repo}@${commitSha.substring(0, 7)}`
+    );
+
     const response = await fetch(
       `${BACKEND_URL}/api/analysis/graph/${owner}/${repo}/${commitSha}`
     );
 
     if (response.status === 404) {
+      console.log(`📭 Graph not found for ${commitSha.substring(0, 7)}`);
       return null;
     }
 
+    const result = await this.safeParseJSON(response);
+
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || "Failed to load graph");
+      const errorMsg =
+        result?.error || result?.details || `Server error: ${response.status}`;
+      console.error(`❌ Failed to load graph: ${errorMsg}`);
+      throw new Error(errorMsg);
     }
 
-    const result = await response.json();
+    if (!result?.graph) {
+      console.log(
+        `📭 No graph data in response for ${commitSha.substring(0, 7)}`
+      );
+      return null;
+    }
+
+    console.log(
+      `✅ Loaded graph: ${result.graph.nodes?.length || 0} nodes, ${
+        result.graph.relationships?.length || 0
+      } relationships`
+    );
     return result.graph;
   }
 
@@ -188,13 +241,14 @@ export class GraphPersistenceService {
       return null;
     }
 
+    const result = await this.safeParseJSON(response);
+
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || "Failed to compare commits");
+      const errorMsg = result?.error || `Server error: ${response.status}`;
+      throw new Error(errorMsg);
     }
 
-    const result = await response.json();
-    return result.comparison;
+    return result?.comparison || null;
   }
 
   /**

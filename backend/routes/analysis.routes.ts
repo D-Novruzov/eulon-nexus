@@ -18,10 +18,22 @@ const router = Router();
  */
 router.post("/store", async (req: Request, res: Response) => {
   try {
+    console.log("📥 Received store request");
+
     const { owner, repo, commitSha, commitMessage, commitDate, graph } =
       req.body;
 
+    console.log(
+      `   Owner: ${owner}, Repo: ${repo}, Commit: ${commitSha?.substring(0, 7)}`
+    );
+    console.log(
+      `   Graph: ${graph?.nodes?.length || 0} nodes, ${
+        graph?.relationships?.length || 0
+      } relationships`
+    );
+
     if (!owner || !repo || !commitSha || !graph) {
+      console.log("   ❌ Missing required fields");
       res.status(400).json({
         error: "Missing required fields: owner, repo, commitSha, graph",
       });
@@ -38,6 +50,7 @@ router.post("/store", async (req: Request, res: Response) => {
       graph as StoredGraph
     );
 
+    console.log(`   ✅ Graph stored successfully`);
     res.json({
       success: true,
       metadata,
@@ -111,15 +124,25 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const { owner, repo, commitSha } = req.params;
+      console.log(
+        `📤 Loading graph for ${owner}/${repo}@${commitSha.substring(0, 7)}`
+      );
+
       const graph = await graphStorageService.loadGraph(owner, repo, commitSha);
 
       if (!graph) {
+        console.log(`   📭 Graph not found`);
         res.status(404).json({
           error: "Graph not found for this commit",
         });
         return;
       }
 
+      console.log(
+        `   ✅ Found graph: ${graph.nodes?.length || 0} nodes, ${
+          graph.relationships?.length || 0
+        } relationships`
+      );
       res.json({
         success: true,
         graph,
