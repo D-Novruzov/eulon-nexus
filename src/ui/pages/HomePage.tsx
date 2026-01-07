@@ -104,6 +104,16 @@ const HomePage: React.FC = () => {
     error: persistenceError,
   } = useGraphPersistence();
 
+  // Track which commits have graphs stored & current loading state
+  const [analyzedCommits, setAnalyzedCommits] = useState<Set<string>>(
+    new Set()
+  );
+  const [loadingCommitSha, setLoadingCommitSha] = useState<string | null>(null);
+  const [currentRepoInfo, setCurrentRepoInfo] = useState<{
+    owner: string;
+    repo: string;
+  } | null>(null);
+
   // Helper to get current GitHub access token from session or localStorage
   const getGitHubAccessToken = useCallback(() => {
     // Try to get from session storage (set after OAuth - this is the actual access token)
@@ -249,34 +259,58 @@ const HomePage: React.FC = () => {
           fileContents: result.fileContents,
         });
 
-        // Store graph on the server for persistence (non-blocking)
+        // Fetch commit history FIRST to get commit info
+        let latestCommitSha = `import-${Date.now()}`;
+        let latestCommitMessage = "Initial import";
+        let latestCommitDate = new Date().toISOString();
+
+        try {
+          const historyResult = await fetchCommitHistory(
+            repo.owner,
+            repo.name,
+            {
+              maxCommits: 100,
+              includeDiffs: false,
+            }
+          );
+
+          // Get latest commit info if available
+          if (historyResult?.commits?.[0]) {
+            const latestCommit = historyResult.commits[0];
+            latestCommitSha = latestCommit.sha;
+            latestCommitMessage = latestCommit.message;
+            latestCommitDate = latestCommit.author?.date || latestCommitDate;
+          }
+        } catch (e) {
+          console.warn("Commit history loading failed:", e);
+        }
+
+        // Store graph on the server for persistence
         try {
           updateState({ progress: "Saving graph to server..." });
-          // Use latest commit info if available, or default values
-          const latestCommit = commitTimeline?.commits?.[0];
+          console.log(
+            `📤 Storing graph for ${repo.owner}/${
+              repo.name
+            }@${latestCommitSha.substring(0, 7)}...`
+          );
+
           await storeGraph(
             repo.owner,
             repo.name,
-            latestCommit?.sha || `import-${Date.now()}`,
-            latestCommit?.message || "Initial import",
-            latestCommit?.author?.date || new Date().toISOString(),
+            latestCommitSha,
+            latestCommitMessage,
+            latestCommitDate,
             result.graph
           );
           console.log(
             `✅ Graph stored on server for ${repo.owner}/${repo.name}`
           );
-        } catch (e) {
-          console.warn("Graph persistence failed (non-critical):", e);
-        }
 
-        // Fetch commit history for the imported repository (non-blocking)
-        try {
-          await fetchCommitHistory(repo.owner, repo.name, {
-            maxCommits: 100,
-            includeDiffs: false,
-          });
+          // Mark this commit as analyzed
+          setAnalyzedCommits((prev) => new Set([...prev, latestCommitSha]));
+          setCurrentRepoInfo({ owner: repo.owner, repo: repo.name });
         } catch (e) {
-          console.warn("Commit history loading failed:", e);
+          console.error("❌ Graph persistence failed:", e);
         }
       }
 
@@ -300,6 +334,114 @@ const HomePage: React.FC = () => {
         progress: "",
         showWelcome: true,
       });
+    }
+  };
+
+  /**
+   * Handle analyzing a specific commit (downloads code at that commit SHA and builds graph)
+   */
+  const handleAnalyzeCommit = async (commit: any) => {
+    if (!currentRepoInfo) {
+      console.error("No repo info available");
+      return;
+    }
+
+    const { owner, repo } = currentRepoInfo;
+
+    try {
+      setLoadingCommitSha(commit.sha);
+      updateState({
+        progress: `Analyzing commit ${commit.sha.substring(0, 7)}...`,
+      });
+
+      // Get GitHub token for authenticated requests
+      const githubToken = getGitHubAccessToken();
+      const ingestionService = new IngestionService(githubToken);
+
+      // Process the repo at this specific commit
+      // Note: GitHub archive URL with ref parameter downloads that specific commit
+      const url = `https://github.com/${owner}/${repo}`;
+
+      const result = await ingestionService.processGitHubRepo(url, {
+        directoryFilter: state.directoryFilter,
+        fileExtensions: state.fileExtensions,
+        ref: commit.sha, // Download this specific commit
+        onProgress: (message: string) => {
+          updateState({ progress: message });
+        },
+      });
+
+      // Store graph for this commit
+      await storeGraph(
+        owner,
+        repo,
+        commit.sha,
+        commit.message,
+        commit.author?.date || new Date().toISOString(),
+        result.graph
+      );
+
+      // Update state
+      updateState({
+        graph: result.graph,
+        fileContents: result.fileContents,
+        progress: "",
+      });
+
+      // Mark as analyzed
+      setAnalyzedCommits((prev) => new Set([...prev, commit.sha]));
+      console.log(
+        `✅ Analyzed and stored graph for commit ${commit.sha.substring(0, 7)}`
+      );
+    } catch (error) {
+      console.error("Failed to analyze commit:", error);
+      updateState({
+        error:
+          error instanceof Error ? error.message : "Failed to analyze commit",
+        progress: "",
+      });
+    } finally {
+      setLoadingCommitSha(null);
+    }
+  };
+
+  /**
+   * Handle loading a previously stored graph for a commit
+   */
+  const handleLoadGraph = async (commit: any) => {
+    if (!currentRepoInfo) {
+      console.error("No repo info available");
+      return;
+    }
+
+    const { owner, repo } = currentRepoInfo;
+
+    try {
+      setLoadingCommitSha(commit.sha);
+      updateState({
+        progress: `Loading graph for commit ${commit.sha.substring(0, 7)}...`,
+      });
+
+      const graph = await loadGraph(owner, repo, commit.sha);
+
+      if (graph) {
+        updateState({
+          graph: graph,
+          progress: "",
+        });
+        console.log(`✅ Loaded graph for commit ${commit.sha.substring(0, 7)}`);
+      } else {
+        console.warn("No graph found, may need to analyze first");
+        updateState({ progress: "" });
+      }
+    } catch (error) {
+      console.error("Failed to load graph:", error);
+      updateState({
+        error: error instanceof Error ? error.message : "Failed to load graph",
+        progress: "",
+      });
+    } finally {
+      setLoadingCommitSha(null);
     }
   };
 
@@ -1528,6 +1670,10 @@ const HomePage: React.FC = () => {
                 <CommitHistoryViewer
                   timeline={commitTimeline}
                   isLoading={historyLoading}
+                  analyzedCommits={analyzedCommits}
+                  loadingCommitSha={loadingCommitSha}
+                  onAnalyzeCommit={handleAnalyzeCommit}
+                  onLoadGraph={handleLoadGraph}
                 />
               </div>
             </div>

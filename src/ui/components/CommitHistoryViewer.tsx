@@ -14,12 +14,20 @@ import type {
 interface CommitHistoryViewerProps {
   timeline: CommitTimeline | null;
   onCommitSelect?: (commit: CommitInfo) => void;
+  onAnalyzeCommit?: (commit: CommitInfo) => void;
+  onLoadGraph?: (commit: CommitInfo) => void;
+  analyzedCommits?: Set<string>; // Set of commit SHAs that have graphs stored
+  loadingCommitSha?: string | null; // Currently loading commit
   isLoading?: boolean;
 }
 
 const CommitHistoryViewer: React.FC<CommitHistoryViewerProps> = ({
   timeline,
   onCommitSelect,
+  onAnalyzeCommit,
+  onLoadGraph,
+  analyzedCommits = new Set(),
+  loadingCommitSha = null,
   isLoading = false,
 }) => {
   const [selectedCommitSha, setSelectedCommitSha] = useState<string | null>(
@@ -173,6 +181,38 @@ const CommitHistoryViewer: React.FC<CommitHistoryViewerProps> = ({
                   <span style={styles.commitAuthor}>
                     👤 {commit.author.name}
                   </span>
+
+                  {/* Graph action buttons */}
+                  <div style={styles.commitActions}>
+                    {analyzedCommits.has(commit.sha) ? (
+                      <button
+                        style={styles.loadGraphButton}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onLoadGraph?.(commit);
+                        }}
+                        disabled={loadingCommitSha === commit.sha}
+                      >
+                        {loadingCommitSha === commit.sha
+                          ? "⏳ Loading..."
+                          : "📊 Load Graph"}
+                      </button>
+                    ) : (
+                      <button
+                        style={styles.analyzeButton}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onAnalyzeCommit?.(commit);
+                        }}
+                        disabled={loadingCommitSha === commit.sha}
+                      >
+                        {loadingCommitSha === commit.sha
+                          ? "⏳ Analyzing..."
+                          : "🔍 Analyze"}
+                      </button>
+                    )}
+                  </div>
+
                   <a
                     href={commit.htmlUrl}
                     target="_blank"
@@ -418,6 +458,32 @@ const styles = {
     padding: "40px",
     color: "#999",
     fontSize: "14px",
+  },
+  commitActions: {
+    display: "flex" as const,
+    gap: "8px",
+  },
+  analyzeButton: {
+    padding: "4px 10px",
+    fontSize: "11px",
+    fontWeight: "500" as const,
+    backgroundColor: "#3498db",
+    color: "white",
+    border: "none",
+    borderRadius: "4px",
+    cursor: "pointer" as const,
+    transition: "background-color 0.2s",
+  },
+  loadGraphButton: {
+    padding: "4px 10px",
+    fontSize: "11px",
+    fontWeight: "500" as const,
+    backgroundColor: "#27ae60",
+    color: "white",
+    border: "none",
+    borderRadius: "4px",
+    cursor: "pointer" as const,
+    transition: "background-color 0.2s",
   },
 } as const;
 
