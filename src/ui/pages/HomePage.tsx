@@ -137,22 +137,6 @@ const HomePage: React.FC = () => {
   const [loadingStage, setLoadingStage] = useState<string>("");
   const [loadingProgress, setLoadingProgress] = useState<number | undefined>(undefined);
 
-  // Helper to get current GitHub access token from session or localStorage
-  const getGitHubAccessToken = useCallback(() => {
-    // Try to get from session storage (set after OAuth - this is the actual access token)
-    const accessToken = sessionStorage.getItem("github_access_token");
-    if (accessToken) {
-      return accessToken;
-    }
-    // Fall back to localStorage (legacy)
-    const legacyToken = localStorage.getItem("github_session_token");
-    if (legacyToken) {
-      return legacyToken;
-    }
-    // Fall back to state
-    return state.githubToken || undefined;
-  }, [state.githubToken]);
-
   // Use settings hook for LLM configuration
   const {
     settings,
