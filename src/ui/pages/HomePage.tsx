@@ -160,6 +160,30 @@ const HomePage: React.FC = () => {
     });
   }, [fetchAllHistory]);
 
+  // Sync analyzed commits with stored graphs when repo changes
+  useEffect(() => {
+    if (currentRepoInfo && currentRepoHistory) {
+      const storedCommitShas = new Set(
+        currentRepoHistory.commits.map((c) => c.commitSha)
+      );
+      setAnalyzedCommits(storedCommitShas);
+      console.log(
+        `📊 Synced ${storedCommitShas.size} analyzed commits for ${currentRepoInfo.owner}/${currentRepoInfo.repo}`
+      );
+    }
+  }, [currentRepoInfo, currentRepoHistory]);
+
+  // Fetch repo history when repo is selected
+  useEffect(() => {
+    if (currentRepoInfo) {
+      fetchRepoHistory(currentRepoInfo.owner, currentRepoInfo.repo).catch(
+        (err) => {
+          console.warn("Failed to fetch repo history:", err);
+        }
+      );
+    }
+  }, [currentRepoInfo, fetchRepoHistory]);
+
   const handleFileUpload = async (
     event: React.ChangeEvent<HTMLInputElement>
   ) => {
@@ -442,6 +466,106 @@ const HomePage: React.FC = () => {
       });
     } finally {
       setLoadingCommitSha(null);
+    }
+  };
+
+  /**
+   * Handle batch analysis of multiple commits
+   */
+  const handleBatchAnalyzeCommits = async (commits: any[]) => {
+    if (!currentRepoInfo || commits.length === 0) {
+      return;
+    }
+
+    const { owner, repo } = currentRepoInfo;
+    const githubToken = getGitHubAccessToken();
+    const ingestionService = new IngestionService(githubToken);
+
+    const totalCommits = commits.length;
+    let processed = 0;
+    const successful: string[] = [];
+    const failed: Array<{ sha: string; error: string }> = [];
+
+    updateState({
+      progress: `Analyzing ${totalCommits} commits... (0/${totalCommits})`,
+      isProcessing: true,
+    });
+
+    for (const commit of commits) {
+      try {
+        setLoadingCommitSha(commit.sha);
+        updateState({
+          progress: `Analyzing commit ${commit.sha.substring(0, 7)}... (${processed + 1}/${totalCommits})`,
+        });
+
+        const result = await ingestionService.processGitHubRepo(
+          `https://github.com/${owner}/${repo}`,
+          {
+            directoryFilter: state.directoryFilter,
+            fileExtensions: state.fileExtensions,
+            ref: commit.sha,
+            onProgress: (message: string) => {
+              updateState({
+                progress: `[${processed + 1}/${totalCommits}] ${message}`,
+              });
+            },
+          }
+        );
+
+        // Store graph for this commit
+        await storeGraph(
+          owner,
+          repo,
+          commit.sha,
+          commit.message,
+          commit.author?.date || new Date().toISOString(),
+          result.graph
+        );
+
+        successful.push(commit.sha);
+        setAnalyzedCommits((prev) => new Set([...prev, commit.sha]));
+        processed++;
+
+        console.log(
+          `✅ [${processed}/${totalCommits}] Analyzed commit ${commit.sha.substring(0, 7)}`
+        );
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown error";
+        failed.push({ sha: commit.sha, error: errorMessage });
+        processed++;
+        console.error(
+          `❌ [${processed}/${totalCommits}] Failed to analyze commit ${commit.sha.substring(0, 7)}:`,
+          error
+        );
+      } finally {
+        setLoadingCommitSha(null);
+      }
+
+      // Small delay to avoid rate limiting
+      if (processed < totalCommits) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    }
+
+    updateState({
+      isProcessing: false,
+      progress: `Completed: ${successful.length} successful, ${failed.length} failed`,
+    });
+
+    if (failed.length > 0) {
+      console.warn("Some commits failed to analyze:", failed);
+      updateState({
+        error: `${failed.length} commit(s) failed to analyze. Check console for details.`,
+      });
+    }
+
+    // Load the last successfully analyzed commit's graph
+    if (successful.length > 0) {
+      const lastCommit = commits.find((c) => successful.includes(c.sha));
+      if (lastCommit) {
+        await handleLoadGraph(lastCommit);
+      }
     }
   };
 
@@ -1668,6 +1792,7 @@ const HomePage: React.FC = () => {
               >
                 <ProjectEvolutionStats timeline={commitTimeline} />
                 <CommitHistoryViewer
+                  onBatchAnalyze={handleBatchAnalyzeCommits}
                   timeline={commitTimeline}
                   isLoading={historyLoading}
                   analyzedCommits={analyzedCommits}

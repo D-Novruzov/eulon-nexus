@@ -14,6 +14,7 @@ export interface IngestionOptions {
   onProgress?: (message: string) => void;
   useArchiveDownload?: boolean; // New option to use archive (ZIP) download
   branch?: string; // Branch to download (default: 'main')
+  ref?: string; // Commit SHA or ref to download (takes precedence over branch)
 }
 
 export interface IngestionResult {
@@ -38,7 +39,7 @@ export class IngestionService {
     githubUrl: string,
     options: IngestionOptions = {}
   ): Promise<IngestionResult> {
-    const { onProgress, useArchiveDownload = true, branch = "main" } = options;
+    const { onProgress, useArchiveDownload = true, branch = "main", ref } = options;
 
     // Reset database for fresh start
     await databaseResetService.resetDatabase({ onProgress });
@@ -60,16 +61,19 @@ export class IngestionService {
       onProgress?.("Downloading repository archive (ZIP)...");
 
       try {
+        // Use ref (commit SHA) if provided, otherwise use branch
+        const refOrBranch = ref || branch;
         structure = await this.githubArchiveService.getRepositoryArchive(
           owner,
           repo,
-          branch,
+          refOrBranch,
           (progress) => {
             onProgress?.(progress.message);
           },
           {
             useBackendProxy: !!this.githubToken,
             accessToken: this.githubToken,
+            isCommitSha: !!ref, // Indicate if this is a commit SHA vs branch
           }
         );
 
