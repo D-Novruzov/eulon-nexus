@@ -132,6 +132,7 @@ const HomePage: React.FC = () => {
     owner: string;
     repo: string;
   } | null>(null);
+  const [currentCommitSha, setCurrentCommitSha] = useState<string | null>(null); // Track which commit's graph is currently displayed
   
   // Enhanced progress tracking
   const [loadingStage, setLoadingStage] = useState<string>("");
@@ -177,8 +178,25 @@ const HomePage: React.FC = () => {
       console.log(
         `📊 Synced ${storedCommitShas.size} analyzed commits for ${currentRepoInfo.owner}/${currentRepoInfo.repo}`
       );
+      
+      // Auto-load the latest commit's graph if available
+      if (currentRepoHistory.commits.length > 0 && !currentCommitSha) {
+        // Commits are stored newest first, so first one is latest
+        const latestCommit = currentRepoHistory.commits[0];
+        console.log(`🔄 Auto-loading latest commit graph: ${latestCommit.commitSha.substring(0, 7)}`);
+        loadGraph(currentRepoInfo.owner, currentRepoInfo.repo, latestCommit.commitSha)
+          .then((graph) => {
+            if (graph) {
+              setCurrentCommitSha(latestCommit.commitSha);
+              updateState({ graph, fileContents: new Map() });
+            }
+          })
+          .catch((err) => {
+            console.warn("Failed to auto-load latest commit graph:", err);
+          });
+      }
     }
-  }, [currentRepoInfo, currentRepoHistory]);
+  }, [currentRepoInfo, currentRepoHistory, currentCommitSha, loadGraph, updateState]);
 
   // Fetch repo history when repo is selected
   useEffect(() => {
@@ -238,6 +256,7 @@ const HomePage: React.FC = () => {
 
       setLoadingStage("");
       setLoadingProgress(undefined);
+      setCurrentCommitSha(null); // ZIP files don't have commits
       updateState({
         graph: result.graph,
         fileContents: result.fileContents,
@@ -341,12 +360,14 @@ const HomePage: React.FC = () => {
             }
           );
 
-          // Get latest commit info if available
+          // Get latest commit info if available (first commit is newest after sort reversal)
           if (historyResult?.commits?.[0]) {
             const latestCommit = historyResult.commits[0];
             latestCommitSha = latestCommit.sha;
             latestCommitMessage = latestCommit.message;
             latestCommitDate = latestCommit.author?.date || latestCommitDate;
+            // Set current commit to latest
+            setCurrentCommitSha(latestCommitSha);
           }
         } catch (e) {
           console.warn("Commit history loading failed:", e);
@@ -472,6 +493,7 @@ const HomePage: React.FC = () => {
       // Update state
       setLoadingStage("");
       setLoadingProgress(undefined);
+      setCurrentCommitSha(commit.sha);
       updateState({
         graph: result.graph,
         fileContents: result.fileContents,
@@ -521,6 +543,7 @@ const HomePage: React.FC = () => {
       setLoadingStage("");
       setLoadingProgress(undefined);
       if (graph) {
+        setCurrentCommitSha(commit.sha);
         updateState({
           graph: graph,
           progress: "",
@@ -1120,6 +1143,26 @@ const HomePage: React.FC = () => {
             <span>{state.graph?.relationships.length || 0} relationships</span>
             <span>•</span>
             <span>{state.fileContents?.size || 0} files</span>
+            {currentCommitSha && commitTimeline && (
+              <>
+                <span>•</span>
+                <span style={{ 
+                  color: colors.primary, 
+                  fontWeight: "600",
+                  fontSize: "13px"
+                }} title={`Currently viewing commit ${currentCommitSha.substring(0, 7)}`}>
+                  📌 {currentCommitSha.substring(0, 7)}
+                  {(() => {
+                    const commit = commitTimeline.commits.find(c => c.sha === currentCommitSha);
+                    if (commit) {
+                      const msg = commit.message.split('\n')[0];
+                      return ` - ${msg.length > 35 ? msg.substring(0, 35) + '...' : msg}`;
+                    }
+                    return '';
+                  })()}
+                </span>
+              </>
+            )}
           </div>
           <div
             style={{
@@ -1157,7 +1200,7 @@ const HomePage: React.FC = () => {
                     setLoadingStage("Fetching History");
                     setLoadingProgress(50);
                     
-                    await fetchCommitHistory(
+                    const timeline = await fetchCommitHistory(
                       repoInfo.owner,
                       repoInfo.repo,
                       { maxCommits: 100 }
@@ -1166,6 +1209,60 @@ const HomePage: React.FC = () => {
                     setLoadingStage("");
                     setLoadingProgress(undefined);
                     console.log(`✅ Successfully fetched commit history`);
+                    
+                    // Auto-load the latest commit's graph if available
+                    if (timeline && timeline.commits.length > 0) {
+                      const latestCommit = timeline.commits[0]; // First commit is newest (after sort reversal)
+                      const hasGraph = analyzedCommits.has(latestCommit.sha);
+                      
+                      if (hasGraph && repoInfo) {
+                        console.log(`🔄 Auto-loading latest commit graph: ${latestCommit.sha.substring(0, 7)}`);
+                        try {
+                          const graph = await loadGraph(repoInfo.owner, repoInfo.repo, latestCommit.sha);
+                          if (graph) {
+                            setCurrentCommitSha(latestCommit.sha);
+                            updateState({ graph, fileContents: new Map() });
+                          }
+                        } catch (err) {
+                          console.warn("Failed to auto-load latest commit graph:", err);
+                        }
+                      } else if (!hasGraph) {
+                        // If no graph exists, analyze the latest commit
+                        console.log(`🔄 Auto-analyzing latest commit: ${latestCommit.sha.substring(0, 7)}`);
+                        try {
+                          const githubToken = getGitHubAccessToken();
+                          const ingestionService = new IngestionService(githubToken);
+                          const result = await ingestionService.processGitHubRepo(
+                            `https://github.com/${repoInfo.owner}/${repoInfo.repo}`,
+                            {
+                              directoryFilter: state.directoryFilter,
+                              fileExtensions: state.fileExtensions,
+                              ref: latestCommit.sha,
+                              onProgress: (message: string) => {
+                                updateState({ progress: message });
+                              },
+                            }
+                          );
+                          await storeGraph(
+                            repoInfo.owner,
+                            repoInfo.repo,
+                            latestCommit.sha,
+                            latestCommit.message,
+                            latestCommit.author?.date || new Date().toISOString(),
+                            result.graph
+                          );
+                          setCurrentCommitSha(latestCommit.sha);
+                          setAnalyzedCommits((prev) => new Set([...prev, latestCommit.sha]));
+                          updateState({
+                            graph: result.graph,
+                            fileContents: result.fileContents,
+                            progress: "",
+                          });
+                        } catch (err) {
+                          console.warn("Failed to auto-analyze latest commit:", err);
+                        }
+                      }
+                    }
                   } catch (error) {
                     console.error("❌ Failed to fetch commit history:", error);
                     setLoadingStage("");
@@ -2013,13 +2110,26 @@ const HomePage: React.FC = () => {
                         try {
                           setLoadingStage("Fetching History");
                           setLoadingProgress(50);
-                          await fetchCommitHistory(
+                          const timeline = await fetchCommitHistory(
                             currentRepoInfo.owner,
                             currentRepoInfo.repo,
                             { maxCommits: 100 }
                           );
                           setLoadingStage("");
                           setLoadingProgress(undefined);
+                          
+                          // Auto-load latest commit if available
+                          if (timeline && timeline.commits.length > 0) {
+                            const latestCommit = timeline.commits[0];
+                            const hasGraph = analyzedCommits.has(latestCommit.sha);
+                            if (hasGraph) {
+                              const graph = await loadGraph(currentRepoInfo.owner, currentRepoInfo.repo, latestCommit.sha);
+                              if (graph) {
+                                setCurrentCommitSha(latestCommit.sha);
+                                updateState({ graph, fileContents: new Map() });
+                              }
+                            }
+                          }
                         } catch (error) {
                           console.error("Retry failed:", error);
                           setLoadingStage("");

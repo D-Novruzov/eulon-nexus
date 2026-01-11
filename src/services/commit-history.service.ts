@@ -95,8 +95,8 @@ export class CommitHistoryService {
         page++;
       }
 
-      // Sort by timestamp (oldest first)
-      commits.sort((a, b) => a.timestamp - b.timestamp);
+      // Sort by timestamp (newest first - most recent commits at the top)
+      commits.sort((a, b) => b.timestamp - a.timestamp);
 
       // Cache the result
       this.commitCache.set(cacheKey, commits);

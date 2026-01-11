@@ -117,6 +117,21 @@ const CommitHistoryViewer: React.FC<CommitHistoryViewerProps> = ({
             {new Date(timeline.stats.dateRange.latest).toLocaleDateString()}
           </span>
         </div>
+        <div style={{
+          marginTop: "12px",
+          padding: "10px",
+          backgroundColor: "#e3f2fd",
+          borderRadius: "6px",
+          fontSize: "12px",
+          color: "#1565c0",
+          border: "1px solid #90caf9"
+        }}>
+          <div style={{ fontWeight: "600", marginBottom: "4px" }}>💡 What do the buttons do?</div>
+          <div style={{ marginLeft: "8px" }}>
+            <div><strong>📊 Load Graph:</strong> Instantly display a previously analyzed graph (fast - already stored)</div>
+            <div><strong>🔍 Analyze:</strong> Download code at this commit and generate a new graph (takes time - processes the codebase)</div>
+          </div>
+        </div>
       </div>
 
       <div style={styles.controlsSection}>
@@ -176,10 +191,11 @@ const CommitHistoryViewer: React.FC<CommitHistoryViewerProps> = ({
       </div>
 
       <div style={styles.timelineContainer}>
+        {/* Reverse the commits array to show newest first (commits are already sorted newest first from service) */}
         {filteredCommits.map((commit, index) => {
           const isSelected = selectedCommitSha === commit.sha;
-          const isFirst = index === 0;
-          const isLast = index === filteredCommits.length - 1;
+          const isFirst = index === 0; // First in list = newest
+          const isLast = index === filteredCommits.length - 1; // Last in list = oldest
 
           const hasGraph = analyzedCommits.has(commit.sha);
           const isSelectedForBatch = selectedCommits.has(commit.sha);
@@ -267,6 +283,7 @@ const CommitHistoryViewer: React.FC<CommitHistoryViewerProps> = ({
                             onLoadGraph?.(commit);
                           }}
                           disabled={isCurrentlyLoading}
+                          title="Load Graph: Display the previously analyzed graph for this commit (fast - already stored)"
                         >
                           {isCurrentlyLoading
                             ? "⏳ Loading..."
@@ -280,6 +297,7 @@ const CommitHistoryViewer: React.FC<CommitHistoryViewerProps> = ({
                             onAnalyzeCommit?.(commit);
                           }}
                           disabled={isCurrentlyLoading}
+                          title="Analyze: Download code at this commit and generate a new graph (takes time - processes the codebase)"
                         >
                           {isCurrentlyLoading
                             ? "⏳ Analyzing..."
