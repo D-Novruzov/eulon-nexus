@@ -85,13 +85,30 @@ const HomePage: React.FC = () => {
   // Create LLM service once (doesn't need token updates)
   const [llmService] = useState(() => new LLMService());
 
+  // Helper to get current GitHub access token from session or localStorage
+  const getGitHubAccessToken = useCallback(() => {
+    // Try to get from session storage (set after OAuth - this is the actual access token)
+    const accessToken = sessionStorage.getItem("github_access_token");
+    if (accessToken) {
+      return accessToken;
+    }
+    // Fall back to localStorage (legacy)
+    const legacyToken = localStorage.getItem("github_session_token");
+    if (legacyToken) {
+      return legacyToken;
+    }
+    // Fall back to state
+    return state.githubToken || undefined;
+  }, [state.githubToken]);
+
   // Commit history hook (uses current GitHub token if available)
+  const githubToken = getGitHubAccessToken();
   const {
     timeline: commitTimeline,
     isLoading: historyLoading,
     error: historyError,
     fetchCommitHistory,
-  } = useCommitHistory();
+  } = useCommitHistory(githubToken);
 
   // Graph persistence hook for storing graphs on the server
   const {
@@ -189,6 +206,18 @@ const HomePage: React.FC = () => {
       );
     }
   }, [currentRepoInfo, fetchRepoHistory]);
+
+  // Extract repo info from githubUrl if currentRepoInfo is not set
+  useEffect(() => {
+    if (!currentRepoInfo && state.githubUrl) {
+      const urlMatch = state.githubUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
+      if (urlMatch) {
+        const [, owner, repo] = urlMatch;
+        console.log(`📦 Auto-extracting repo info from URL: ${owner}/${repo}`);
+        setCurrentRepoInfo({ owner, repo });
+      }
+    }
+  }, [state.githubUrl, currentRepoInfo]);
 
   const handleFileUpload = async (
     event: React.ChangeEvent<HTMLInputElement>
@@ -1120,17 +1149,47 @@ const HomePage: React.FC = () => {
             <button
               onClick={async () => {
                 updateState({ showHistory: true });
-                // If we have a repo but no commit timeline, fetch it
-                if (currentRepoInfo && !commitTimeline && !historyLoading) {
+                
+                // Determine repo info - use currentRepoInfo or extract from githubUrl
+                let repoInfo = currentRepoInfo;
+                
+                if (!repoInfo && state.githubUrl) {
+                  // Try to extract repo info from githubUrl if available
+                  const urlMatch = state.githubUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
+                  if (urlMatch) {
+                    const [, owner, repo] = urlMatch;
+                    repoInfo = { owner, repo };
+                    setCurrentRepoInfo(repoInfo);
+                    console.log(`📦 Extracted repo info from URL: ${owner}/${repo}`);
+                  }
+                }
+                
+                // If we have repo info but no commit timeline, fetch it
+                if (repoInfo && !commitTimeline && !historyLoading) {
                   try {
+                    console.log(`📜 Fetching commit history for ${repoInfo.owner}/${repoInfo.repo}...`);
+                    console.log(`🔑 GitHub token available: ${githubToken ? 'YES' : 'NO'}`);
+                    
+                    setLoadingStage("Fetching History");
+                    setLoadingProgress(50);
+                    
                     await fetchCommitHistory(
-                      currentRepoInfo.owner,
-                      currentRepoInfo.repo,
+                      repoInfo.owner,
+                      repoInfo.repo,
                       { maxCommits: 100 }
                     );
+                    
+                    setLoadingStage("");
+                    setLoadingProgress(undefined);
+                    console.log(`✅ Successfully fetched commit history`);
                   } catch (error) {
-                    console.error("Failed to fetch commit history:", error);
+                    console.error("❌ Failed to fetch commit history:", error);
+                    setLoadingStage("");
+                    setLoadingProgress(undefined);
+                    // Error is already handled by useCommitHistory hook and displayed in the modal
                   }
+                } else if (!repoInfo) {
+                  console.warn("⚠️ No repository info available. Cannot fetch commit history.");
                 }
               }}
               style={{
@@ -1964,22 +2023,30 @@ const HomePage: React.FC = () => {
                     Error Loading Commit History
                   </h3>
                   <p style={{ marginBottom: "20px" }}>{historyError}</p>
-                  <button
-                    onClick={async () => {
-                      try {
-                        await fetchCommitHistory(
-                          currentRepoInfo.owner,
-                          currentRepoInfo.repo,
-                          { maxCommits: 100 }
-                        );
-                      } catch (error) {
-                        console.error("Retry failed:", error);
-                      }
-                    }}
-                    style={styles.primaryButton}
-                  >
-                    Retry
-                  </button>
+                  {currentRepoInfo && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          setLoadingStage("Fetching History");
+                          setLoadingProgress(50);
+                          await fetchCommitHistory(
+                            currentRepoInfo.owner,
+                            currentRepoInfo.repo,
+                            { maxCommits: 100 }
+                          );
+                          setLoadingStage("");
+                          setLoadingProgress(undefined);
+                        } catch (error) {
+                          console.error("Retry failed:", error);
+                          setLoadingStage("");
+                          setLoadingProgress(undefined);
+                        }
+                      }}
+                      style={styles.primaryButton}
+                    >
+                      Retry
+                    </button>
+                  )}
                 </div>
               ) : !commitTimeline && historyLoading ? (
                 <div

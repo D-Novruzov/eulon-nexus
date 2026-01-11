@@ -103,9 +103,32 @@ export class CommitHistoryService {
 
       console.log(`✅ Fetched ${commits.length} commits from ${owner}/${repo}`);
       return commits;
-    } catch (error) {
+    } catch (error: any) {
       console.error(`❌ Failed to fetch commit history: ${error}`);
-      throw error;
+      
+      // Extract user-friendly error message from GitHub API response
+      let errorMessage = "Failed to fetch commit history";
+      
+      if (error?.response) {
+        const status = error.response.status;
+        const data = error.response.data;
+        
+        if (status === 404) {
+          errorMessage = `Repository ${owner}/${repo} not found. Please check that the repository exists and you have access to it.`;
+        } else if (status === 403) {
+          errorMessage = "Access denied. This repository may be private or you may have exceeded GitHub API rate limits.";
+        } else if (status === 401) {
+          errorMessage = "Authentication failed. Please reconnect your GitHub account.";
+        } else if (data?.message) {
+          errorMessage = data.message;
+        } else {
+          errorMessage = `GitHub API error (${status}): ${data?.message || "Unknown error"}`;
+        }
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+      
+      throw new Error(errorMessage);
     }
   }
 

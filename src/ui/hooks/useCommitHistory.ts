@@ -21,9 +21,9 @@ export const useCommitHistory = (githubToken?: string) => {
   const serviceRef = useRef<CommitHistoryService | null>(null);
 
   const initializeService = useCallback(() => {
-    if (!serviceRef.current) {
-      serviceRef.current = new CommitHistoryService(githubToken);
-    }
+    // Always recreate service to ensure token is up to date
+    // This is necessary because the token might change after OAuth
+    serviceRef.current = new CommitHistoryService(githubToken);
     return serviceRef.current;
   }, [githubToken]);
 
