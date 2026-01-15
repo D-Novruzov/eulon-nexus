@@ -24,7 +24,7 @@ import {
 } from "../components/index.ts";
 import { useCommitHistory } from "../hooks/useCommitHistory.ts";
 import { useGraphPersistence } from "../hooks/useGraphPersistence.ts";
-import LoadingIndicator from "../components/LoadingIndicator.tsx";
+import { useLocalGraphPersistence } from "../hooks/useLocalGraphPersistence.ts";
 
 interface AppState {
   // Data
@@ -145,6 +145,49 @@ const HomePage: React.FC = () => {
     getCurrentProviderApiKey,
     updateCurrentProviderApiKey,
   } = useSettings();
+
+  // Local graph persistence hook (IndexedDB) for instant reload
+  const {
+    restoreLastSession,
+    isLoading: localPersistenceLoading,
+  } = useLocalGraphPersistence();
+
+  // Auto-restore last session on mount
+  const [autoRestoreAttempted, setAutoRestoreAttempted] = useState(false);
+
+  useEffect(() => {
+    if (autoRestoreAttempted || localPersistenceLoading) return;
+
+    const attemptAutoRestore = async () => {
+      setAutoRestoreAttempted(true);
+
+      try {
+        const restored = await restoreLastSession();
+
+        if (restored) {
+          console.log(`✅ Auto-restored graph: ${restored.repoId}`);
+          setState((prev) => ({
+            ...prev,
+            graph: restored.graph,
+            showWelcome: false,
+            progress: `Restored from cache: ${restored.projectName || restored.repoId}`,
+          }));
+
+          // Extract repo info from repoId if it's a GitHub repo
+          if (restored.repoId.startsWith('github:')) {
+            const match = restored.repoId.match(/^github:([^/]+)\/([^@]+)/);
+            if (match) {
+              setCurrentRepoInfo({ owner: match[1], repo: match[2] });
+            }
+          }
+        }
+      } catch (error) {
+        console.warn("Auto-restore failed:", error);
+      }
+    };
+
+    attemptAutoRestore();
+  }, [localPersistenceLoading, autoRestoreAttempted, restoreLastSession]);
 
   const updateState = useCallback((updates: Partial<AppState>) => {
     setState((prev) => ({ ...prev, ...updates }));

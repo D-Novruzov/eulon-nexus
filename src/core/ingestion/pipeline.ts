@@ -46,24 +46,39 @@ export class GraphPipeline {
     // Create appropriate graph implementation based on feature flags
     const graph = await this.createGraph();
 
+    // Enable batch mode for DualWriteKnowledgeGraph
+    const { DualWriteKnowledgeGraph } = await import('../graph/dual-write-knowledge-graph.ts');
+    const isBatchMode = graph instanceof DualWriteKnowledgeGraph;
+    
+    if (isBatchMode) {
+      console.log('🔄 Batch mode enabled for optimized graph writes');
+      (graph as InstanceType<typeof DualWriteKnowledgeGraph>).beginBatch();
+    }
+
     const processingMode = isParallelParsingEnabled() ? 'parallel' : 'single-threaded';
     console.log(`🚀 Starting 4-pass ingestion for project: ${projectName} (${processingMode} processing)`);
     
+    const startTime = performance.now();
+    
     // Pass 1: Structure Analysis
     console.log('📁 Pass 1: Analyzing project structure...');
+    const pass1Start = performance.now();
     await this.structureProcessor.process(graph, {
       projectRoot,
       projectName,
       filePaths
     });
+    console.log(`   Pass 1 completed in ${(performance.now() - pass1Start).toFixed(0)}ms`);
     
     // Pass 2: Code Parsing and Definition Extraction (populates FunctionRegistryTrie)
     console.log(`🔍 Pass 2: Parsing code and extracting definitions (${processingMode})...`);
+    const pass2Start = performance.now();
     await this.parsingProcessor.process(graph, {
       filePaths,
       fileContents,
       options  // Pass filtering options to ParsingProcessor
     });
+    console.log(`   Pass 2 completed in ${(performance.now() - pass2Start).toFixed(0)}ms`);
     
     // Get AST map and function registry from parsing processor
     const astMap = this.parsingProcessor.getASTMap();
@@ -73,20 +88,26 @@ export class GraphPipeline {
     
     // Pass 3: Import Resolution (builds complete import map)
     console.log('🔗 Pass 3: Resolving imports and building dependency map...');
+    const pass3Start = performance.now();
     await this.importProcessor.process(graph, astMap, fileContents);
+    console.log(`   Pass 3 completed in ${(performance.now() - pass3Start).toFixed(0)}ms`);
     
     // Pass 4: Call Resolution (uses import map and function trie)
     console.log('📞 Pass 4: Resolving function calls with 3-stage strategy...');
+    const pass4Start = performance.now();
     const importMap = this.importProcessor.getImportMap();
     await this.callProcessor.process(graph, astMap, importMap);
+    console.log(`   Pass 4 completed in ${(performance.now() - pass4Start).toFixed(0)}ms`);
     
-    console.log(`Ingestion complete. Graph contains ${graph.nodes.length} nodes and ${graph.relationships.length} relationships.`);
+    const totalTime = performance.now() - startTime;
+    console.log(`✅ Ingestion complete in ${totalTime.toFixed(0)}ms. Graph contains ${graph.nodes.length} nodes and ${graph.relationships.length} relationships.`);
     
-    // Flush KuzuDB operations and log dual-write statistics if using DualWriteKnowledgeGraph
-    const { DualWriteKnowledgeGraph } = await import('../graph/dual-write-knowledge-graph.ts');
-    if (graph instanceof DualWriteKnowledgeGraph) {
-      await graph.flushKuzuDB();
-      graph.logDualWriteStats();
+    // Commit batch and flush KuzuDB operations
+    if (isBatchMode) {
+      console.log('🔄 Committing batch writes...');
+      await (graph as InstanceType<typeof DualWriteKnowledgeGraph>).commitBatch();
+      await (graph as InstanceType<typeof DualWriteKnowledgeGraph>).flushKuzuDB();
+      (graph as InstanceType<typeof DualWriteKnowledgeGraph>).logDualWriteStats();
     }
     
     // Debug: Show graph structure

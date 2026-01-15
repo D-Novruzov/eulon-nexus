@@ -7,6 +7,9 @@ import { ZipService, type CompleteZipStructure } from "./zip.ts";
 import { getIngestionWorker } from "../lib/workerUtils.ts";
 import type { KnowledgeGraph } from "../core/graph/types.ts";
 import { databaseResetService } from "./database-reset.service.ts";
+import { GraphPersistence, type PersistedGraph } from "../lib/graph-persistence.ts";
+import { ContentHasher } from "../lib/content-hasher.ts";
+import { SimpleKnowledgeGraph } from "../core/graph/graph.ts";
 
 export interface IngestionOptions {
   directoryFilter?: string;
@@ -15,11 +18,14 @@ export interface IngestionOptions {
   useArchiveDownload?: boolean; // New option to use archive (ZIP) download
   branch?: string; // Branch to download (default: 'main')
   ref?: string; // Commit SHA or ref to download (takes precedence over branch)
+  forceRebuild?: boolean; // Force full rebuild even if cache exists
 }
 
 export interface IngestionResult {
   graph: KnowledgeGraph;
   fileContents: Map<string, string>;
+  fromCache?: boolean;
+  wasIncremental?: boolean;
 }
 
 export class IngestionService {
@@ -39,10 +45,7 @@ export class IngestionService {
     githubUrl: string,
     options: IngestionOptions = {}
   ): Promise<IngestionResult> {
-    const { onProgress, useArchiveDownload = true, branch = "main", ref } = options;
-
-    // Reset database for fresh start
-    await databaseResetService.resetDatabase({ onProgress });
+    const { onProgress, useArchiveDownload = true, branch = "main", ref, forceRebuild = false } = options;
 
     // Parse GitHub URL
     const match = githubUrl.match(
@@ -54,14 +57,45 @@ export class IngestionService {
 
     const [, owner, repo] = match;
 
+    // Generate repo ID for caching
+    const repoId = GraphPersistence.generateRepoId({
+      type: 'github',
+      owner,
+      repo,
+      commitSha: ref,
+    });
+
+    // Step 1: Check for cached graph (unless force rebuild)
+    if (!forceRebuild) {
+      onProgress?.("Checking for cached graph...");
+      const cachedGraph = await GraphPersistence.load(repoId);
+      
+      if (cachedGraph) {
+        console.log(`✅ Found cached graph for ${repoId}`);
+        
+        // Restore graph from cache
+        const graph = this.restoreGraphFromPersisted(cachedGraph);
+        
+        onProgress?.("Loaded from cache (instant)");
+        
+        // Store as last opened repo
+        localStorage.setItem('gitnexus_last_repo', repoId);
+        
+        return {
+          graph,
+          fileContents: new Map(), // File contents not available from cache
+          fromCache: true,
+        };
+      }
+    }
+
+    // Step 2: Download repository
     let structure: CompleteRepositoryStructure | ArchiveRepositoryStructure;
 
-    // Use archive download by default (much faster, only 1 API call!)
     if (useArchiveDownload) {
       onProgress?.("Downloading repository archive (ZIP)...");
 
       try {
-        // Use ref (commit SHA) if provided, otherwise use branch
         const refOrBranch = ref || branch;
         structure = await this.githubArchiveService.getRepositoryArchive(
           owner,
@@ -73,7 +107,7 @@ export class IngestionService {
           {
             useBackendProxy: !!this.githubToken,
             accessToken: this.githubToken,
-            isCommitSha: !!ref, // Indicate if this is a commit SHA vs branch
+            isCommitSha: !!ref,
           }
         );
 
@@ -92,7 +126,6 @@ export class IngestionService {
         );
       }
     } else {
-      // Legacy API method (slower, many API calls)
       onProgress?.("Discovering complete repository structure (API method)...");
       structure = await this.githubService.getCompleteRepositoryStructure(
         owner,
@@ -101,21 +134,50 @@ export class IngestionService {
     }
 
     onProgress?.(
-      `Discovered ${structure.allPaths.length} paths, ${structure.fileContents.size} files. Processing...`
+      `Discovered ${structure.allPaths.length} paths, ${structure.fileContents.size} files.`
     );
 
-    // Prepare data for pipeline
+    const fileContents = structure.fileContents;
+
+    // Step 3: Generate file hashes and check for changes
+    onProgress?.("Checking for file changes...");
+    const currentHashes = await ContentHasher.hashFiles(fileContents);
+
+    // Try to load existing graph and check if files changed
+    const existingGraph = await GraphPersistence.load(repoId);
+    
+    if (existingGraph && !forceRebuild) {
+      const hasChanges = ContentHasher.hasChanges(currentHashes, existingGraph.fileHashes);
+      
+      if (!hasChanges) {
+        console.log(`✅ No file changes detected for ${repoId}, using cached graph`);
+        onProgress?.("No changes detected, using cached graph");
+        
+        const graph = this.restoreGraphFromPersisted(existingGraph);
+        localStorage.setItem('gitnexus_last_repo', repoId);
+        
+        return {
+          graph,
+          fileContents,
+          fromCache: true,
+        };
+      }
+      
+      // Log what changed
+      const changes = ContentHasher.compareHashes(currentHashes, existingGraph.fileHashes);
+      console.log(`📊 File changes: ${changes.added.length} added, ${changes.modified.length} modified, ${changes.deleted.length} deleted`);
+    }
+
+    // Step 4: Reset database and run full pipeline (files changed or no cache)
+    onProgress?.("Resetting database for fresh analysis...");
+    await databaseResetService.resetDatabase({ onProgress });
+
     const projectName = `${owner}/${repo}`;
     const projectRoot = "";
-
-    // The pipeline now receives ALL paths (files + directories)
-    // Filtering will happen during parsing, not here
     const filePaths = structure.allPaths;
-    const fileContents = structure.fileContents;
 
     onProgress?.("Generating knowledge graph...");
 
-    // Create worker and process
     const worker = await getIngestionWorker();
 
     try {
@@ -130,15 +192,29 @@ export class IngestionService {
         throw new Error(result.error || "Processing failed");
       }
 
-      // Recreate the appropriate graph based on worker metadata
       const graph = await this.recreateGraphFromResult(result);
+
+      // Step 5: Persist graph and hashes to IndexedDB
+      onProgress?.("Saving to cache...");
+      await GraphPersistence.save({
+        repoId,
+        nodes: graph.nodes,
+        relationships: graph.relationships,
+        fileHashes: currentHashes,
+        createdAt: Date.now(),
+        projectName,
+        sourceType: 'github',
+        commitSha: ref,
+      });
+
+      localStorage.setItem('gitnexus_last_repo', repoId);
 
       return {
         graph,
         fileContents,
+        fromCache: false,
       };
     } finally {
-      // Clean up worker
       if ("terminate" in worker) {
         (worker as { terminate: () => void }).terminate();
       }
@@ -149,10 +225,14 @@ export class IngestionService {
     file: File,
     options: IngestionOptions = {}
   ): Promise<IngestionResult> {
-    const { onProgress } = options;
+    const { onProgress, forceRebuild = false } = options;
 
-    // Reset database for fresh start
-    await databaseResetService.resetDatabase({ onProgress });
+    // Generate repo ID for caching
+    const repoId = GraphPersistence.generateRepoId({
+      type: 'zip',
+      filename: file.name,
+      size: file.size,
+    });
 
     onProgress?.("Discovering complete ZIP structure...");
 
@@ -164,21 +244,49 @@ export class IngestionService {
     const normalizedStructure = this.normalizeZipPaths(structure);
 
     onProgress?.(
-      `Discovered ${normalizedStructure.allPaths.length} paths, ${normalizedStructure.fileContents.size} files. Processing...`
+      `Discovered ${normalizedStructure.allPaths.length} paths, ${normalizedStructure.fileContents.size} files.`
     );
 
-    // Prepare data for pipeline
+    const fileContents = normalizedStructure.fileContents;
+
+    // Generate file hashes
+    onProgress?.("Checking for file changes...");
+    const currentHashes = await ContentHasher.hashFiles(fileContents);
+
+    // Check for existing cached graph
+    const existingGraph = await GraphPersistence.load(repoId);
+    
+    if (existingGraph && !forceRebuild) {
+      const hasChanges = ContentHasher.hasChanges(currentHashes, existingGraph.fileHashes);
+      
+      if (!hasChanges) {
+        console.log(`✅ No file changes detected for ${repoId}, using cached graph`);
+        onProgress?.("No changes detected, using cached graph");
+        
+        const graph = this.restoreGraphFromPersisted(existingGraph);
+        localStorage.setItem('gitnexus_last_repo', repoId);
+        
+        return {
+          graph,
+          fileContents,
+          fromCache: true,
+        };
+      }
+      
+      const changes = ContentHasher.compareHashes(currentHashes, existingGraph.fileHashes);
+      console.log(`📊 File changes: ${changes.added.length} added, ${changes.modified.length} modified, ${changes.deleted.length} deleted`);
+    }
+
+    // Reset database and run full pipeline
+    onProgress?.("Resetting database for fresh analysis...");
+    await databaseResetService.resetDatabase({ onProgress });
+
     const projectName = file.name.replace(".zip", "");
     const projectRoot = "";
-
-    // The pipeline now receives ALL paths (files + directories)
-    // Filtering will happen during parsing, not here
     const filePaths = normalizedStructure.allPaths;
-    const fileContents = normalizedStructure.fileContents;
 
     onProgress?.("Generating knowledge graph...");
 
-    // Create worker and process
     const worker = await getIngestionWorker();
 
     try {
@@ -193,15 +301,28 @@ export class IngestionService {
         throw new Error(result.error || "Processing failed");
       }
 
-      // Recreate the appropriate graph based on worker metadata
       const graph = await this.recreateGraphFromResult(result);
+
+      // Persist graph and hashes to IndexedDB
+      onProgress?.("Saving to cache...");
+      await GraphPersistence.save({
+        repoId,
+        nodes: graph.nodes,
+        relationships: graph.relationships,
+        fileHashes: currentHashes,
+        createdAt: Date.now(),
+        projectName,
+        sourceType: 'zip',
+      });
+
+      localStorage.setItem('gitnexus_last_repo', repoId);
 
       return {
         graph,
         fileContents,
+        fromCache: false,
       };
     } finally {
-      // Clean up worker
       if ("terminate" in worker) {
         (worker as { terminate: () => void }).terminate();
       }
@@ -272,6 +393,53 @@ export class IngestionService {
     }
 
     return structure; // No normalization if prefix isn't common enough
+  }
+
+  /**
+   * Restore a KnowledgeGraph from persisted data
+   */
+  private restoreGraphFromPersisted(persisted: PersistedGraph): KnowledgeGraph {
+    const graph = new SimpleKnowledgeGraph();
+    
+    for (const node of persisted.nodes) {
+      graph.addNode(node);
+    }
+    
+    for (const rel of persisted.relationships) {
+      graph.addRelationship(rel);
+    }
+    
+    console.log(`✅ Restored graph: ${persisted.nodes.length} nodes, ${persisted.relationships.length} relationships`);
+    return graph;
+  }
+
+  /**
+   * Load last opened repository from cache (for page reload)
+   */
+  async loadLastOpenedRepo(): Promise<IngestionResult | null> {
+    const lastRepoId = localStorage.getItem('gitnexus_last_repo');
+    
+    if (!lastRepoId) {
+      console.log('ℹ️ No last opened repo found');
+      return null;
+    }
+
+    console.log(`🔄 Attempting to restore last session: ${lastRepoId}`);
+    
+    const cachedGraph = await GraphPersistence.load(lastRepoId);
+    
+    if (!cachedGraph) {
+      console.log('ℹ️ Cached graph not found or expired');
+      return null;
+    }
+
+    const graph = this.restoreGraphFromPersisted(cachedGraph);
+    
+    return {
+      graph,
+      fileContents: new Map(),
+      fromCache: true,
+    };
   }
 
   /**

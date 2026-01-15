@@ -4,11 +4,18 @@
  * This class implements transparent dual-write functionality, writing data to both
  * JSON (SimpleKnowledgeGraph) and KuzuDB simultaneously. The JSON storage remains
  * the primary source of truth, while KuzuDB provides enhanced query capabilities.
+ * 
+ * Supports batch mode for optimized bulk writes.
  */
 
 import type { KnowledgeGraph, GraphNode, GraphRelationship } from './types.ts';
 import { SimpleKnowledgeGraph } from './graph.ts';
 import type { KuzuKnowledgeGraph } from './kuzu-knowledge-graph.ts';
+
+interface BatchBuffer {
+  nodes: GraphNode[];
+  relationships: GraphRelationship[];
+}
 
 export class DualWriteKnowledgeGraph implements KnowledgeGraph {
   private jsonGraph: SimpleKnowledgeGraph;
@@ -22,10 +29,17 @@ export class DualWriteKnowledgeGraph implements KnowledgeGraph {
     kuzuErrors: number;
   };
 
-  constructor(kuzuGraph?: KuzuKnowledgeGraph) {
+  // Batch mode state
+  private batchMode: boolean = false;
+  private batchBuffer: BatchBuffer = { nodes: [], relationships: [] };
+  private batchSize: number = 500;
+  private autoFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(kuzuGraph?: KuzuKnowledgeGraph, options?: { batchSize?: number }) {
     this.jsonGraph = new SimpleKnowledgeGraph();
     this.kuzuGraph = kuzuGraph || null;
     this.enableKuzuDB = !!kuzuGraph;
+    this.batchSize = options?.batchSize || 500;
     this.dualWriteStats = {
       nodesWrittenToJSON: 0,
       nodesWrittenToKuzuDB: 0,
@@ -50,48 +64,185 @@ export class DualWriteKnowledgeGraph implements KnowledgeGraph {
   }
 
   /**
+   * Begin batch mode - buffer writes for bulk commit
+   */
+  beginBatch(): void {
+    this.batchMode = true;
+    this.batchBuffer = { nodes: [], relationships: [] };
+    console.log('🔄 Batch mode enabled');
+  }
+
+  /**
+   * Commit batch - flush all buffered writes
+   */
+  async commitBatch(): Promise<void> {
+    if (!this.batchMode) {
+      console.warn('⚠️ commitBatch called but not in batch mode');
+      return;
+    }
+
+    const nodeCount = this.batchBuffer.nodes.length;
+    const relCount = this.batchBuffer.relationships.length;
+    
+    console.log(`🚀 Committing batch: ${nodeCount} nodes, ${relCount} relationships`);
+
+    // Write all buffered nodes to KuzuDB
+    if (this.enableKuzuDB && this.kuzuGraph && nodeCount > 0) {
+      try {
+        for (const node of this.batchBuffer.nodes) {
+          this.kuzuGraph.addNode(node);
+          this.dualWriteStats.nodesWrittenToKuzuDB++;
+        }
+      } catch (error) {
+        this.dualWriteStats.kuzuErrors++;
+        console.error('❌ KuzuDB batch node write failed:', error);
+      }
+    }
+
+    // Write all buffered relationships to KuzuDB
+    if (this.enableKuzuDB && this.kuzuGraph && relCount > 0) {
+      try {
+        for (const rel of this.batchBuffer.relationships) {
+          this.kuzuGraph.addRelationship(rel);
+          this.dualWriteStats.relationshipsWrittenToKuzuDB++;
+        }
+      } catch (error) {
+        this.dualWriteStats.kuzuErrors++;
+        console.error('❌ KuzuDB batch relationship write failed:', error);
+      }
+    }
+
+    // Commit KuzuDB transaction
+    if (this.enableKuzuDB && this.kuzuGraph) {
+      try {
+        await this.kuzuGraph.commitAll();
+      } catch (error) {
+        console.error('❌ KuzuDB commit failed:', error);
+      }
+    }
+
+    // Clear buffer and exit batch mode
+    this.batchBuffer = { nodes: [], relationships: [] };
+    this.batchMode = false;
+    
+    console.log(`✅ Batch committed: ${nodeCount} nodes, ${relCount} relationships`);
+  }
+
+  /**
+   * Check if in batch mode
+   */
+  isInBatchMode(): boolean {
+    return this.batchMode;
+  }
+
+  /**
+   * Get current batch buffer size
+   */
+  getBatchBufferSize(): { nodes: number; relationships: number } {
+    return {
+      nodes: this.batchBuffer.nodes.length,
+      relationships: this.batchBuffer.relationships.length,
+    };
+  }
+
+  /**
    * Add node - transparent dual-write
-   * Maintains exact same synchronous interface as original
+   * In batch mode, buffers KuzuDB writes for bulk commit
    */
   addNode(node: GraphNode): void {
     // Always write to JSON first (primary storage)
     this.jsonGraph.addNode(node);
     this.dualWriteStats.nodesWrittenToJSON++;
 
-    // Write to KuzuDB in background if enabled
+    // In batch mode, buffer for later
+    if (this.batchMode) {
+      this.batchBuffer.nodes.push(node);
+      this.scheduleAutoFlush();
+      return;
+    }
+
+    // Write to KuzuDB immediately if not in batch mode
     if (this.enableKuzuDB && this.kuzuGraph) {
       try {
-        // KuzuDB addNode is synchronous (batched)
         this.kuzuGraph.addNode(node);
         this.dualWriteStats.nodesWrittenToKuzuDB++;
       } catch (error) {
         this.dualWriteStats.kuzuErrors++;
         console.warn(`❌ KuzuDB node write failed for ${node.id} (${node.label}):`, error);
-        // Continue - JSON is primary, KuzuDB failure shouldn't break the process
       }
     }
   }
 
   /**
    * Add relationship - transparent dual-write  
-   * Maintains exact same synchronous interface as original
+   * In batch mode, buffers KuzuDB writes for bulk commit
    */
   addRelationship(relationship: GraphRelationship): void {
     // Always write to JSON first (primary storage)
     this.jsonGraph.addRelationship(relationship);
     this.dualWriteStats.relationshipsWrittenToJSON++;
 
-    // Write to KuzuDB in background if enabled
+    // In batch mode, buffer for later
+    if (this.batchMode) {
+      this.batchBuffer.relationships.push(relationship);
+      this.scheduleAutoFlush();
+      return;
+    }
+
+    // Write to KuzuDB immediately if not in batch mode
     if (this.enableKuzuDB && this.kuzuGraph) {
       try {
-        // KuzuDB addRelationship is synchronous (batched)
         this.kuzuGraph.addRelationship(relationship);
         this.dualWriteStats.relationshipsWrittenToKuzuDB++;
       } catch (error) {
         this.dualWriteStats.kuzuErrors++;
         console.warn(`❌ KuzuDB relationship write failed for ${relationship.id} (${relationship.type}):`, error);
-        // Continue - JSON is primary, KuzuDB failure shouldn't break the process
       }
+    }
+  }
+
+  /**
+   * Schedule auto-flush when batch buffer gets large
+   */
+  private scheduleAutoFlush(): void {
+    const totalBuffered = this.batchBuffer.nodes.length + this.batchBuffer.relationships.length;
+    
+    // Auto-flush if buffer exceeds batch size
+    if (totalBuffered >= this.batchSize) {
+      this.flushBatchBuffer();
+    }
+  }
+
+  /**
+   * Flush batch buffer to KuzuDB without exiting batch mode
+   */
+  private async flushBatchBuffer(): Promise<void> {
+    if (!this.enableKuzuDB || !this.kuzuGraph) return;
+    
+    const nodesToFlush = [...this.batchBuffer.nodes];
+    const relsToFlush = [...this.batchBuffer.relationships];
+    
+    // Clear buffer
+    this.batchBuffer.nodes = [];
+    this.batchBuffer.relationships = [];
+    
+    if (nodesToFlush.length === 0 && relsToFlush.length === 0) return;
+
+    console.log(`🔄 Auto-flushing batch: ${nodesToFlush.length} nodes, ${relsToFlush.length} relationships`);
+
+    try {
+      for (const node of nodesToFlush) {
+        this.kuzuGraph.addNode(node);
+        this.dualWriteStats.nodesWrittenToKuzuDB++;
+      }
+      
+      for (const rel of relsToFlush) {
+        this.kuzuGraph.addRelationship(rel);
+        this.dualWriteStats.relationshipsWrittenToKuzuDB++;
+      }
+    } catch (error) {
+      this.dualWriteStats.kuzuErrors++;
+      console.error('❌ Auto-flush failed:', error);
     }
   }
 
@@ -212,7 +363,7 @@ export class DualWriteKnowledgeGraph implements KnowledgeGraph {
             if (count > 0) {
               console.log(`  ${nodeType}: ${count} nodes`);
             }
-          } catch (error) {
+          } catch {
             // Skip silently
           }
         }
@@ -228,7 +379,7 @@ export class DualWriteKnowledgeGraph implements KnowledgeGraph {
             if (count > 0) {
               console.log(`  ${nodeType}: ${count} nodes`);
             }
-          } catch (error) {
+          } catch {
             // Node type might not exist in this database, skip silently
           }
         }
@@ -249,7 +400,7 @@ export class DualWriteKnowledgeGraph implements KnowledgeGraph {
             if (count > 0) {
               console.log(`  ${relType}: ${count} relationships`);
             }
-          } catch (error) {
+          } catch {
             // Skip silently
           }
         }
@@ -264,7 +415,7 @@ export class DualWriteKnowledgeGraph implements KnowledgeGraph {
             if (count > 0) {
               console.log(`  ${relType}: ${count} relationships`);
             }
-          } catch (error) {
+          } catch {
             // Relationship type might not exist in this database, skip silently
           }
         }

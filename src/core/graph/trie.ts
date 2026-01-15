@@ -252,6 +252,40 @@ export class FunctionRegistryTrie {
     // TODO: Clean up the trie structure (complex operation, can be done later)
     // For now, we'll leave empty nodes in the trie for performance
   }
+
+  /**
+   * Serialize the trie indexes for persistence
+   * Only serializes the indexes, not the trie structure (rebuilt on restore)
+   */
+  serialize(): SerializedFunctionRegistry {
+    return {
+      definitions: Array.from(this.allDefinitions.values()),
+      version: 1,
+    };
+  }
+
+  /**
+   * Restore trie from serialized data
+   */
+  static deserialize(data: SerializedFunctionRegistry): FunctionRegistryTrie {
+    const trie = new FunctionRegistryTrie();
+    
+    if (!data || !data.definitions) {
+      return trie;
+    }
+    
+    for (const definition of data.definitions) {
+      trie.addDefinition(definition);
+    }
+    
+    console.log(`✅ Restored FunctionRegistryTrie: ${data.definitions.length} definitions`);
+    return trie;
+  }
+}
+
+export interface SerializedFunctionRegistry {
+  definitions: FunctionDefinition[];
+  version: number;
 }
 
 export type { FunctionDefinition };
