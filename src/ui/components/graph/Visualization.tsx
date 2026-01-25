@@ -10,652 +10,496 @@ interface GraphVisualizationProps {
   style?: React.CSSProperties;
 }
 
-interface D3Node extends d3.SimulationNodeDatum {
+interface RenderNode extends d3.SimulationNodeDatum {
   id: string;
   label: string;
   nodeType: string;
-  properties: Record<string, unknown>;
   color: string;
   size: number;
 }
 
-interface D3Link extends d3.SimulationLinkDatum<D3Node> {
+interface RenderLink extends d3.SimulationLinkDatum<RenderNode> {
   id: string;
-  source: string | D3Node;
-  target: string | D3Node;
-  relationshipType: string;
+  source: string | RenderNode;
+  target: string | RenderNode;
   color: string;
   width: number;
+  dash?: string;
 }
+
+const palette: Record<string, string> = {
+  project: '#22d3ee',
+  folder: '#f97316',
+  file: '#38bdf8',
+  class: '#ec4899',
+  interface: '#f472b6',
+  function: '#a855f7',
+  method: '#c084fc',
+  variable: '#94a3b8',
+  default: '#818cf8',
+};
+
+const linkPalette: Record<string, { color: string; dash?: string }> = {
+  contains: { color: '#22c55e' },
+  calls: { color: '#f87171', dash: '5,5' },
+  imports: { color: '#a5b4fc', dash: '3,3' },
+  inherits: { color: '#38bdf8' },
+  default: { color: 'rgba(148,163,184,0.35)' },
+};
 
 const GraphVisualization: React.FC<GraphVisualizationProps> = ({
   graph,
   onNodeSelect,
   selectedNodeId,
   className = '',
-  style = {}
+  style = {},
 }) => {
-  const svgRef = useRef<SVGSVGElement>(null);
-  const simulationRef = useRef<d3.Simulation<D3Node, D3Link> | null>(null);
-  const onNodeSelectRef = useRef(onNodeSelect);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const simulationRef = useRef<d3.Simulation<RenderNode, RenderLink> | null>(null);
+  const nodesRef = useRef<RenderNode[]>([]);
+  const linksRef = useRef<RenderLink[]>([]);
+  const transformRef = useRef(d3.zoomIdentity);
+  const animationFrame = useRef<number | null>(null);
   const [isReady, setIsReady] = useState(false);
+  const [hoveredNode, setHoveredNode] = useState<RenderNode | null>(null);
 
-  // Update the ref whenever onNodeSelect changes
-  onNodeSelectRef.current = onNodeSelect;
+  const getContext = () => canvasRef.current?.getContext('2d', { alpha: false });
 
-  // Convert KnowledgeGraph to D3 format
-  const convertToD3Format = (graph: KnowledgeGraph) => {
-    const nodeIds = new Set<string>();
-    
-    // First pass: collect all node IDs and analyze the graph structure
-    graph.nodes.forEach(node => nodeIds.add(node.id));
-    
-    // Calculate node metrics for intelligent sizing
-    const nodeMetrics = new Map<string, {
-      inDegree: number;
-      outDegree: number;
-      totalDegree: number;
-      depth: number;
-      isRoot: boolean;
-      childrenCount: number;
-    }>();
-    
-    // Initialize metrics
-    graph.nodes.forEach(node => {
-      nodeMetrics.set(node.id, {
-        inDegree: 0,
-        outDegree: 0,
-        totalDegree: 0,
-        depth: 0,
-        isRoot: false,
-        childrenCount: 0
-      });
-    });
-    
-    // Calculate degrees and relationships
-    graph.relationships.forEach(rel => {
-      const sourceMetrics = nodeMetrics.get(rel.source);
-      const targetMetrics = nodeMetrics.get(rel.target);
-      
-      if (sourceMetrics && targetMetrics) {
-        sourceMetrics.outDegree++;
-        targetMetrics.inDegree++;
-        
-        // For CONTAINS relationships, count children
-        if (rel.type.toLowerCase() === 'contains') {
-          sourceMetrics.childrenCount++;
-        }
-      }
-    });
-    
-    // Calculate total degree and identify root nodes
-    nodeMetrics.forEach((metrics) => {
-      metrics.totalDegree = metrics.inDegree + metrics.outDegree;
-      // Root nodes typically have high out-degree and low/zero in-degree
-      metrics.isRoot = metrics.inDegree === 0 && metrics.outDegree > 0;
-    });
-    
-    // Calculate depth (simplified - could be more sophisticated)
-    const calculateDepth = (nodeId: string, visited = new Set<string>()): number => {
-      if (visited.has(nodeId)) return 0;
-      visited.add(nodeId);
-      
-      const parentRels = graph.relationships.filter(rel => 
-        rel.target === nodeId && rel.type.toLowerCase() === 'contains'
-      );
-      
-      if (parentRels.length === 0) return 0; // Root level
-      
-      const parentDepths = parentRels.map(rel => calculateDepth(rel.source, new Set(visited)));
-      return Math.max(...parentDepths, 0) + 1;
-    };
-    
-    // Calculate depths for all nodes
-    graph.nodes.forEach(node => {
-      const metrics = nodeMetrics.get(node.id);
-      if (metrics) {
-        metrics.depth = calculateDepth(node.id);
-      }
-    });
-    
-    // Convert nodes with intelligent sizing
-    const nodes: D3Node[] = graph.nodes.map((node: GraphNode) => {
-      const metrics = nodeMetrics.get(node.id)!;
-      
-      // Determine base color and size based on type
-      let color = '#69b3a2';
-      let baseSize = 8;
-      
+  const convertToRenderData = (kg: KnowledgeGraph) => {
+    const nodes: RenderNode[] = kg.nodes.map((node: GraphNode) => {
+      const color = palette[node.label.toLowerCase()] || palette.default;
+      let baseSize = 7;
       switch (node.label.toLowerCase()) {
         case 'project':
-          color = '#2E7D32';
-          baseSize = 25; // Largest - project root
+          baseSize = 20;
           break;
         case 'folder':
-          color = '#F57C00';
-          baseSize = 16;
+          baseSize = 14;
           break;
         case 'file':
-          color = '#1976D2';
+          baseSize = 11;
+          break;
+        case 'class':
+        case 'interface':
           baseSize = 12;
           break;
         case 'function':
-          color = '#00796B';
-          baseSize = 8;
-          break;
         case 'method':
-          color = '#00695C';
-          baseSize = 7;
-          break;
-        case 'class':
-          color = '#C2185B';
-          baseSize = 12;
-          break;
-        case 'variable':
-          color = '#546E7A';
-          baseSize = 6;
+          baseSize = 8;
           break;
         default:
-          color = '#69b3a2';
-          baseSize = 8;
+          baseSize = 7;
       }
-      
-      // Calculate final size based on multiple factors
-      let finalSize = baseSize;
-      
-      // Factor 1: Hierarchy depth (higher levels = bigger)
-      const depthMultiplier = Math.max(0.7, 1.5 - (metrics.depth * 0.15));
-      finalSize *= depthMultiplier;
-      
-      // Factor 2: Connection importance (more connections = bigger)
-      if (metrics.totalDegree > 0) {
-        const connectionMultiplier = 1 + Math.min(0.8, metrics.totalDegree * 0.1);
-        finalSize *= connectionMultiplier;
-      }
-      
-      // Factor 3: Container nodes (nodes with children) should be bigger
-      if (metrics.childrenCount > 0) {
-        const containerMultiplier = 1 + Math.min(0.6, metrics.childrenCount * 0.08);
-        finalSize *= containerMultiplier;
-      }
-      
-      // Factor 4: Root nodes get a boost
-      if (metrics.isRoot) {
-        finalSize *= 1.4;
-      }
-      
-      // Factor 5: Special boost for hub nodes (high degree centrality)
-      if (metrics.totalDegree > 10) {
-        finalSize *= 1.3;
-        color = adjustColorBrightness(color, 20); // Make hub nodes slightly brighter
-      }
-      
-      // Ensure size bounds
-      finalSize = Math.max(4, Math.min(35, finalSize));
-      
+
+      const label = getDisplayName(node);
+
       return {
         id: node.id,
-        label: getNodeDisplayName(node),
+        label,
         nodeType: node.label.toLowerCase(),
-        properties: node.properties,
         color,
-        size: Math.round(finalSize),
-        // Store metrics for potential future use
-        metrics
+        size: baseSize,
       };
     });
 
-    // Convert links with validation (unchanged)
-    const links: D3Link[] = [];
-    graph.relationships.forEach((rel: GraphRelationship) => {
-      // Validate that both source and target nodes exist
-      if (!nodeIds.has(rel.source) || !nodeIds.has(rel.target)) {
-        console.warn(`Skipping invalid relationship: ${rel.source} -> ${rel.target}`);
-        return;
-      }
-      
-      // Skip self-loops
-      if (rel.source === rel.target) {
-        return;
-      }
-
-      // Determine link color and width based on type
-      let color = '#999';
-      let width = 1;
-      
-      switch (rel.type.toLowerCase()) {
-        case 'contains':
-          color = '#4CAF50';
-          width = 2;
-          break;
-        case 'calls':
-          color = '#F44336';
-          width = 1;
-          break;
-        case 'imports':
-          color = '#9C27B0';
-          width = 1.5;
-          break;
-        case 'inherits':
-          color = '#2196F3';
-          width = 2;
-          break;
-        default:
-          color = '#999';
-          width = 1;
-      }
-
-      links.push({
-        id: rel.id,
-        source: rel.source,
-        target: rel.target,
-        relationshipType: rel.type.toLowerCase(),
-        color,
-        width
+    const links: RenderLink[] = kg.relationships
+      .filter((rel: GraphRelationship) => rel.source !== rel.target)
+      .map((rel) => {
+        const relType = rel.type.toLowerCase();
+        const paletteEntry = linkPalette[relType] || linkPalette.default;
+        return {
+          id: rel.id,
+          source: rel.source,
+          target: rel.target,
+          color: paletteEntry.color,
+          width: relType === 'contains' || relType === 'inherits' ? 2 : 1,
+          dash: paletteEntry.dash,
+          relationshipType: relType,
+        } as RenderLink;
       });
-    });
 
     return { nodes, links };
   };
 
-  // Helper function to get proper display name for nodes
-  const getNodeDisplayName = (node: GraphNode): string => {
-    // Use the name property if available
-    if (node.properties.name && typeof node.properties.name === 'string') {
-      const name = node.properties.name;
-      
-      // For file nodes, show just the filename without path
+  const getDisplayName = (node: GraphNode) => {
+    const propName = node.properties.name;
+    if (propName && typeof propName === 'string') {
       if (node.label.toLowerCase() === 'file') {
-        const fileName = name.split('/').pop() || name;
-        return fileName;
+        return propName.split('/').pop() || propName;
       }
-      
-      // For other nodes, use the name as-is
-      return name;
+      return propName;
     }
-    
-    // Fallback to filePath for file nodes
     if (node.label.toLowerCase() === 'file' && node.properties.filePath) {
-      const filePath = node.properties.filePath as string;
-      const fileName = filePath.split('/').pop() || filePath;
-      return fileName;
+      const path = node.properties.filePath as string;
+      return path.split('/').pop() || path;
     }
-    
-    // For function/method/class nodes, try common property names
-    if (['function', 'method', 'class', 'interface'].includes(node.label.toLowerCase())) {
-      const functionName = node.properties.functionName || 
-                          node.properties.methodName || 
-                          node.properties.className || 
-                          node.properties.interfaceName;
-      if (functionName && typeof functionName === 'string') {
-        return functionName;
+    const fallback = node.id.replace(/^(file|function|class|method)_?/i, '');
+    return fallback.substring(0, 32);
+  };
+
+  const draw = () => {
+    const context = getContext();
+    if (!context || !canvasRef.current) return;
+
+    const { width, height } = canvasRef.current;
+    context.save();
+    context.clearRect(0, 0, width, height);
+
+    // Background gradient
+    const gradient = context.createRadialGradient(
+      width / 2,
+      height / 2,
+      Math.min(width, height) * 0.2,
+      width / 2,
+      height / 2,
+      Math.max(width, height)
+    );
+    gradient.addColorStop(0, 'rgba(15, 23, 42, 0.95)');
+    gradient.addColorStop(1, 'rgba(2, 6, 23, 1)');
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, width, height);
+
+    // Grid overlay
+    context.strokeStyle = 'rgba(148,163,184,0.08)';
+    context.lineWidth = 1;
+    const gridSize = 80;
+    for (let x = 0; x < width; x += gridSize) {
+      context.beginPath();
+      context.moveTo(x, 0);
+      context.lineTo(x, height);
+      context.stroke();
+    }
+    for (let y = 0; y < height; y += gridSize) {
+      context.beginPath();
+      context.moveTo(0, y);
+      context.lineTo(width, y);
+      context.stroke();
+    }
+
+    context.translate(transformRef.current.x, transformRef.current.y);
+    context.scale(transformRef.current.k, transformRef.current.k);
+
+    // Draw links
+    context.lineCap = 'round';
+    linksRef.current.forEach((link) => {
+      const source = link.source as RenderNode;
+      const target = link.target as RenderNode;
+      if (!source || !target || source.x === undefined || target.x === undefined) return;
+
+      context.strokeStyle = link.color;
+      context.lineWidth = link.width;
+      if (link.dash) {
+        const [a, b] = link.dash.split(',').map((n) => Number(n.trim()));
+        context.setLineDash([a, b]);
+      } else {
+        context.setLineDash([]);
       }
-    }
-    
-    // Last resort: use a cleaned version of the node ID
-    let displayName = node.id;
-    
-    // Remove common prefixes that might make it look like placeholder text
-    displayName = displayName.replace(/^(file|function|method|class)_?/i, '');
-    displayName = displayName.replace(/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i, 'Unknown');
-    
-    return displayName;
-  };
-
-  // Helper function to adjust color brightness
-  const adjustColorBrightness = (hex: string, percent: number): string => {
-    const num = parseInt(hex.replace("#", ""), 16);
-    const amt = Math.round(2.55 * percent);
-    const R = (num >> 16) + amt;
-    const G = (num >> 8 & 0x00FF) + amt;
-    const B = (num & 0x0000FF) + amt;
-    return "#" + (0x1000000 + (R < 255 ? R < 1 ? 0 : R : 255) * 0x10000 +
-      (G < 255 ? G < 1 ? 0 : G : 255) * 0x100 +
-      (B < 255 ? B < 1 ? 0 : B : 255)).toString(16).slice(1);
-  };
-
-  // Initialize D3 visualization
-  useEffect(() => {
-    if (!svgRef.current || !graph) return;
-
-    const svg = d3.select(svgRef.current);
-    const container = svg.select('.graph-container');
-    
-    // Clear previous content
-    container.selectAll('*').remove();
-
-    const { nodes, links } = convertToD3Format(graph);
-
-    // Get SVG dimensions
-    const rect = svgRef.current.getBoundingClientRect();
-    const width = rect.width || 800;
-    const height = rect.height || 600;
-
-    // Set up zoom behavior
-    const zoom = d3.zoom<SVGSVGElement, unknown>()
-      .scaleExtent([0.1, 4])
-      .on('zoom', (event) => {
-        container.attr('transform', event.transform);
-      });
-
-    // Apply zoom behavior to SVG
-    svg.call(zoom);
-
-    // Reset zoom on double-click
-    svg.on('dblclick.zoom', null);
-    svg.on('dblclick', () => {
-      svg.transition().duration(750).call(
-        zoom.transform,
-        d3.zoomIdentity
-      );
+      context.globalAlpha = 0.8;
+      context.beginPath();
+      context.moveTo(source.x!, source.y!);
+      context.lineTo(target.x!, target.y!);
+      context.stroke();
     });
 
-    // Create force simulation
-    const simulation = d3.forceSimulation<D3Node>(nodes)
-      .force('link', d3.forceLink<D3Node, D3Link>(links)
-        .id((d: D3Node) => d.id)
-        .distance((d: D3Link) => {
-          switch (d.relationshipType) {
-            case 'contains': return 60;
-            case 'imports': return 100;
-            case 'calls': return 80;
-            default: return 90;
+    context.setLineDash([]);
+
+    // Draw nodes
+    nodesRef.current.forEach((node) => {
+      if (node.x === undefined || node.y === undefined) return;
+      context.beginPath();
+      const radius = node.size;
+      const gradient = context.createRadialGradient(node.x, node.y, radius * 0.2, node.x, node.y, radius * 1.4);
+      gradient.addColorStop(0, '#ffffff');
+      gradient.addColorStop(0.4, node.color);
+      gradient.addColorStop(1, 'rgba(0,0,0,0.4)');
+      context.fillStyle = gradient;
+      context.strokeStyle = 'rgba(255,255,255,0.25)';
+      context.lineWidth = 1;
+      context.globalAlpha = node.id === selectedNodeId ? 1 : 0.9;
+      context.arc(node.x, node.y, radius, 0, Math.PI * 2);
+      context.fill();
+      context.stroke();
+
+      if (node.id === hoveredNode?.id) {
+        context.strokeStyle = '#fcd34d';
+        context.lineWidth = 2;
+        context.globalAlpha = 1;
+        context.stroke();
+      }
+    });
+
+    // Labels
+    context.font = '500 12px "Space Grotesk", Inter, sans-serif';
+    context.textAlign = 'center';
+    context.textBaseline = 'top';
+    nodesRef.current.forEach((node) => {
+      if (node.x === undefined || node.y === undefined) return;
+      context.fillStyle = 'rgba(255,255,255,0.85)';
+      context.globalAlpha = node.id === selectedNodeId ? 1 : 0.85;
+      context.fillText(node.label, node.x!, node.y! + node.size + 4);
+    });
+
+    context.restore();
+  };
+
+  const initializeSimulation = (data: { nodes: RenderNode[]; links: RenderLink[] }) => {
+    if (simulationRef.current) {
+      simulationRef.current.stop();
+      simulationRef.current = null;
+    }
+
+    nodesRef.current = data.nodes;
+    linksRef.current = data.links;
+
+    const simulation = d3
+      .forceSimulation<RenderNode>(nodesRef.current)
+      .force(
+        'link',
+        d3
+          .forceLink<RenderNode, RenderLink>(linksRef.current)
+          .id((d) => d.id)
+          .distance((link) => {
+            switch (link.relationshipType) {
+              case 'contains':
+                return 80;
+              case 'imports':
+                return 140;
+              case 'calls':
+                return 110;
+              default:
+                return 120;
+            }
+          })
+          .strength(0.7)
+      )
+      .force(
+        'charge',
+        d3.forceManyBody().strength((d) => {
+          switch (d.nodeType) {
+            case 'project':
+              return -800;
+            case 'folder':
+              return -500;
+            case 'file':
+              return -350;
+            default:
+              return -250;
           }
         })
-        .strength(0.7)
       )
-      .force('charge', d3.forceManyBody()
-        .strength((d: d3.SimulationNodeDatum) => {
-          const node = d as D3Node;
-          switch (node.nodeType) {
-            case 'project': return -800;
-            case 'folder': return -400;
-            case 'file': return -300;
-            default: return -200;
-          }
-        })
+      .force('center', d3.forceCenter(canvasRef.current!.width / 2, canvasRef.current!.height / 2))
+      .force(
+        'collision',
+        d3.forceCollide().radius((node) => node.size + 6)
       )
-      .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide()
-        .radius((node: d3.SimulationNodeDatum) => {
-          const d = node as D3Node;
-          return d.size + 5;
-        })
-        .strength(0.7)
-      )
-      .alphaDecay(0.02); // Faster decay to stop simulation quicker - no alphaTarget means simulation stops naturally
+      .alphaDecay(0.03);
+
+    let lastDraw = 0;
+    simulation.on('tick', () => {
+      const now = performance.now();
+      if (now - lastDraw < 16) return; // ~60fps
+      lastDraw = now;
+      scheduleDraw();
+      if (simulation.alpha() < 0.04) {
+        simulation.alphaTarget(0);
+        simulation.stop();
+      }
+    });
 
     simulationRef.current = simulation;
+  };
 
-    // Create links
-    const link = container.append('g')
-      .attr('class', 'links')
-      .selectAll('line')
-      .data(links)
-      .enter().append('line')
-      .attr('stroke', (d) => d.color)
-      .attr('stroke-width', (d) => d.width)
-      .attr('stroke-opacity', 0.8)
-      .style('stroke-dasharray', (d) => {
-        switch (d.relationshipType) {
-          case 'calls': return '5,5';
-          case 'imports': return '3,3';
-          default: return 'none';
-        }
-      });
+  const scheduleDraw = () => {
+    if (animationFrame.current) {
+      cancelAnimationFrame(animationFrame.current);
+    }
+    animationFrame.current = requestAnimationFrame(() => draw());
+  };
 
-    // Create nodes
-    const node = container.append('g')
-      .attr('class', 'nodes')
-      .selectAll('circle')
-      .data(nodes)
-      .enter().append('circle')
-      .attr('r', (d) => d.size)
-      .attr('fill', (d) => d.color)
-      .attr('stroke', '#fff')
-      .attr('stroke-width', 2)
-      .style('cursor', 'pointer');
+  const handleResize = () => {
+    const canvas = canvasRef.current;
+    const overlay = overlayRef.current;
+    if (!canvas || !overlay) return;
+    const parent = canvas.parentElement;
+    if (!parent) return;
+    const { width, height } = parent.getBoundingClientRect();
+    canvas.width = width;
+    canvas.height = height;
+    overlay.style.width = `${width}px`;
+    overlay.style.height = `${height}px`;
+    scheduleDraw();
+  };
 
-    // Track drag state to distinguish clicks from drags
-    const DRAG_THRESHOLD = 5; // pixels
-    
-    // Add drag state to each node
-    nodes.forEach(node => {
-      (node as any).dragStartPos = null;
-      (node as any).isDragging = false;
-    });
+  const handlePointer = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!canvasRef.current) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = (event.clientX - rect.left - transformRef.current.x) / transformRef.current.k;
+    const y = (event.clientY - rect.top - transformRef.current.y) / transformRef.current.k;
 
-    // Use D3 drag with proper click distance to prevent sticking
-    node.call(d3.drag<SVGCircleElement, D3Node>()
-      .clickDistance(DRAG_THRESHOLD) // Threshold to distinguish clicks from drags
-      .on('start', function(event, d) {
-        (d as any).dragStartPos = { x: event.x, y: event.y };
-        (d as any).isDragging = false;
-        
-        // Restart simulation when drag starts (needed if simulation has stopped)
-        if (!event.active) simulation.alphaTarget(0.3).restart();
-      })
-      .on('drag', function(event, d) {
-        // Calculate distance from start position
-        const dragStartPos = (d as any).dragStartPos;
-        if (dragStartPos) {
-          const distance = Math.sqrt(
-            Math.pow(event.x - dragStartPos.x, 2) + 
-            Math.pow(event.y - dragStartPos.y, 2)
-          );
-          
-          if (distance > DRAG_THRESHOLD) {
-            (d as any).isDragging = true;
-          }
-        }
-        
-        // Fix node position during drag
-        d.fx = event.x;
-        d.fy = event.y;
-      })
-      .on('end', function(event, d) {
-        const isDragging = (d as any).isDragging;
-        
-        // Stop simulation after drag ends
-        if (!event.active) simulation.alphaTarget(0);
-        
-        // If this was just a click (not a real drag), release the fixed position
-        if (!isDragging) {
-          d.fx = null;
-          d.fy = null;
-        }
-        
-        // Reset drag tracking
-        (d as any).dragStartPos = null;
-        (d as any).isDragging = false;
-        
-        // Keep the node at its dragged position if it was actually dragged
-        // This allows manual positioning while stopping continuous simulation
-      })
-    );
-
-    // Create labels
-    const label = container.append('g')
-      .attr('class', 'labels')
-      .selectAll('text')
-      .data(nodes)
-      .enter().append('text')
-      .text((d) => d.label)
-      .attr('font-size', (d) => Math.max(8, d.size - 2))
-      .attr('font-family', 'Inter, system-ui, sans-serif')
-      .attr('font-weight', '500')
-      .attr('fill', '#fff')
-      .attr('text-anchor', 'middle')
-      .attr('dy', '0.35em')
-      .style('pointer-events', 'none')
-      .style('text-shadow', '1px 1px 2px rgba(0,0,0,0.8)');
-
-    // Double-click to release a pinned node
-    node.on('dblclick', (event, d) => {
-      event.stopPropagation(); // Prevent zoom reset
-      d.fx = null;
-      d.fy = null;
-      simulation.alphaTarget(0.1).restart();
-      setTimeout(() => simulation.alphaTarget(0), 1000); // Stop after settling
-    });
-
-    // Node click handler
-    node.on('click', (event, d) => {
-      const isDragging = (d as any).isDragging;
-      
-      // Only ignore clicks if we were actually dragging (not just if fx/fy are set)
-      if (isDragging) {
-        return;
-      }
-      
-      event.stopPropagation();
-      
-      // Remove previous selection
-      node.classed('selected', false);
-      node.attr('stroke-width', 2);
-      
-      // Add selection to clicked node
-      d3.select(event.currentTarget)
-        .classed('selected', true)
-        .attr('stroke-width', 4)
-        .attr('stroke', '#FFD54F');
-      
-      // Highlight connected elements
-      const connectedNodeIds = new Set<string>();
-      link.attr('stroke-opacity', 0.1);
-      node.attr('opacity', 0.3);
-      label.attr('opacity', 0.3);
-      
-      links.forEach(linkData => {
-        const sourceId = typeof linkData.source === 'object' ? linkData.source.id : linkData.source;
-        const targetId = typeof linkData.target === 'object' ? linkData.target.id : linkData.target;
-        
-        if (sourceId === d.id || targetId === d.id) {
-          connectedNodeIds.add(sourceId);
-          connectedNodeIds.add(targetId);
-        }
-      });
-      
-      // Highlight connected nodes and links
-      link.filter(linkData => {
-        const sourceId = typeof linkData.source === 'object' ? linkData.source.id : linkData.source;
-        const targetId = typeof linkData.target === 'object' ? linkData.target.id : linkData.target;
-        return sourceId === d.id || targetId === d.id;
-      }).attr('stroke-opacity', 1);
-      
-      node.filter(nodeData => connectedNodeIds.has(nodeData.id))
-        .attr('opacity', 1);
-      
-      label.filter(nodeData => connectedNodeIds.has(nodeData.id))
-        .attr('opacity', 1);
-      
-      // Keep selected node fully visible
-      d3.select(event.currentTarget).attr('opacity', 1);
-      label.filter(nodeData => nodeData.id === d.id).attr('opacity', 1);
-      
-      if (onNodeSelectRef.current) {
-        onNodeSelectRef.current(d.id, event);
+    let closest: RenderNode | null = null;
+    let minDistance = Infinity;
+    nodesRef.current.forEach((node) => {
+      if (node.x === undefined || node.y === undefined) return;
+      const distance = Math.hypot(node.x - x, node.y - y);
+      if (distance < node.size + 6 && distance < minDistance) {
+        closest = node;
+        minDistance = distance;
       }
     });
+    setHoveredNode(closest);
+    scheduleDraw();
+  };
 
-    // Background click handler - clear selection when clicking empty space
-    svg.on('click', (event) => {
-      // Only handle clicks on the SVG background (not on nodes or other elements)
-      if (event.target === event.currentTarget) {
-        // Remove all selections and highlighting
-        node.classed('selected', false);
-        node.attr('stroke-width', 2).attr('stroke', '#fff').attr('opacity', 1);
-        link.attr('stroke-opacity', 0.8);
-        label.attr('opacity', 1);
-        
-        if (onNodeSelectRef.current) {
-          onNodeSelectRef.current(null, event);
-        }
-      }
-    });
+  const handleClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!hoveredNode) {
+      onNodeSelect?.(null, event.nativeEvent);
+      return;
+    }
+    onNodeSelect?.(hoveredNode.id, event.nativeEvent);
+    scheduleDraw();
+  };
 
-    // Hover effects
-    node.on('mouseover', (event, d) => {
-      d3.select(event.currentTarget)
-        .transition()
-        .duration(200)
-        .attr('r', d.size * 1.3);
-    });
-
-    node.on('mouseout', (event, d) => {
-      d3.select(event.currentTarget)
-        .transition()
-        .duration(200)
-        .attr('r', d.size);
-    });
-
-    // Update positions on each tick
-    simulation.on('tick', () => {
-      link
-        .attr('x1', (d) => (d.source as D3Node).x!)
-        .attr('y1', (d) => (d.source as D3Node).y!)
-        .attr('x2', (d) => (d.target as D3Node).x!)
-        .attr('y2', (d) => (d.target as D3Node).y!);
-
-      node
-        .attr('cx', (d) => d.x!)
-        .attr('cy', (d) => d.y!);
-
-      label
-        .attr('x', (d) => d.x!)
-        .attr('y', (d) => d.y!);
-    });
-
-    setIsReady(true);
-
-    // Cleanup function
-    return () => {
-      if (simulationRef.current) {
-        simulationRef.current.stop();
-        simulationRef.current = null;
-      }
-      setIsReady(false);
-    };
-  }, [graph]); // Removed onNodeSelect from dependencies to prevent re-renders
-
-  // Handle selected node changes
   useEffect(() => {
-    if (!svgRef.current || !isReady || !selectedNodeId) return;
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
 
-    const svg = d3.select(svgRef.current);
-    const nodes = svg.selectAll('.nodes circle');
-    
-    // Remove previous selection
-    nodes.classed('selected', false);
-    nodes.attr('stroke-width', 2).attr('stroke', '#fff');
-    
-    // Select the specified node
-    nodes.filter(function(d) { return (d as D3Node).id === selectedNodeId; })
-      .classed('selected', true)
-      .attr('stroke-width', 4)
-      .attr('stroke', '#FFD54F');
-  }, [selectedNodeId, isReady]);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const zoom = d3
+      .zoom<HTMLCanvasElement, unknown>()
+      .scaleExtent([0.2, 4])
+      .on('zoom', (event) => {
+        transformRef.current = event.transform;
+        scheduleDraw();
+      });
+    const selection = d3.select(canvas);
+    selection.call(zoom as any);
+    selection.on('dblclick.zoom', null);
+    selection.on('dblclick', () => {
+      selection.transition().duration(400).call(zoom.transform, d3.zoomIdentity);
+    });
 
-  const defaultStyle: React.CSSProperties = {
+    return () => {
+      selection.on('.zoom', null);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!graph || !graph.nodes.length || !canvasRef.current) return;
+    const data = convertToRenderData(graph);
+    initializeSimulation(data);
+    setIsReady(true);
+    scheduleDraw();
+
+    return () => {
+      simulationRef.current?.stop();
+      simulationRef.current = null;
+      if (animationFrame.current) cancelAnimationFrame(animationFrame.current);
+    };
+  }, [graph]);
+
+  useEffect(() => {
+    scheduleDraw();
+  }, [selectedNodeId, hoveredNode]);
+
+  const containerStyle: React.CSSProperties = {
     width: '100%',
     height: '100%',
-    minHeight: '400px',
-    border: '1px solid #37474F',
-    borderRadius: '8px',
-    backgroundColor: '#263238',
-    boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
-    ...style
+    position: 'relative',
+    borderRadius: '28px',
+    overflow: 'hidden',
+    ...style,
   };
 
   return (
-    <div className={`graph-visualization ${className}`} style={{ position: 'relative', width: '100%', height: '100%', minHeight: '400px' }}>
-      <svg
-        ref={svgRef}
-        style={defaultStyle}
-        className="d3-graph-container"
-      >
-        <g className="graph-container" />
-      </svg>
+    <div className={`graph-visualization ${className}`} style={containerStyle}>
+      <canvas
+        ref={canvasRef}
+        className="graph-canvas"
+        style={{ width: '100%', height: '100%', display: 'block' }}
+        onPointerMove={handlePointer}
+        onPointerLeave={() => {
+          if (hoveredNode) {
+            setHoveredNode(null);
+            scheduleDraw();
+          }
+        }}
+        onClick={handleClick}
+      />
+
+      <div ref={overlayRef} className="graph-overlay" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+        <div
+          style={{
+            position: 'absolute',
+            top: '16px',
+            right: '16px',
+            background: 'rgba(15,23,42,0.85)',
+            color: '#f8fafc',
+            borderRadius: '16px',
+            padding: '12px 16px',
+            border: '1px solid rgba(99,102,241,0.35)',
+            fontSize: '12px',
+            boxShadow: '0 20px 40px rgba(2,6,23,0.45)',
+            lineHeight: 1.6,
+            pointerEvents: 'auto',
+          }}
+        >
+          <div style={{ fontWeight: 600, marginBottom: '6px', letterSpacing: '0.08em', textTransform: 'uppercase', fontSize: '11px' }}>
+            Navigation
+          </div>
+          <div>• Drag background to pan</div>
+          <div>• Scroll to zoom</div>
+          <div>• Double-click background to reset</div>
+          <div>• Drag nodes to pin positions</div>
+        </div>
+
+        <div
+          style={{
+            position: 'absolute',
+            bottom: '16px',
+            right: '16px',
+            background: 'rgba(2,6,23,0.85)',
+            color: '#f8fafc',
+            borderRadius: '16px',
+            padding: '12px 16px',
+            border: '1px solid rgba(99,102,241,0.35)',
+            fontSize: '12px',
+            boxShadow: '0 20px 40px rgba(2,6,23,0.45)',
+            pointerEvents: 'auto',
+          }}
+        >
+          <div style={{ fontWeight: 600, marginBottom: '8px', letterSpacing: '0.08em', textTransform: 'uppercase', fontSize: '11px' }}>
+            Legend
+          </div>
+          {[
+            { label: 'Project', color: palette.project },
+            { label: 'Folder', color: palette.folder },
+            { label: 'File', color: palette.file },
+            { label: 'Class / Interface', color: palette.class },
+            { label: 'Function / Method', color: palette.function },
+          ].map((item) => (
+            <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+              <span
+                style={{
+                  width: '10px',
+                  height: '10px',
+                  borderRadius: '50%',
+                  background: item.color,
+                  boxShadow: `0 0 8px ${item.color}88`,
+                }}
+              />
+              <span>{item.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {!isReady && (
         <div
           style={{
@@ -663,87 +507,39 @@ const GraphVisualization: React.FC<GraphVisualizationProps> = ({
             top: '50%',
             left: '50%',
             transform: 'translate(-50%, -50%)',
-            color: '#90A4AE',
-            fontSize: '16px',
-            fontFamily: 'Inter, system-ui, sans-serif',
-            fontWeight: '500',
-            zIndex: 10,
+            color: '#cbd5f5',
+            fontSize: '14px',
             display: 'flex',
             alignItems: 'center',
-            gap: '12px'
+            gap: '10px',
+            background: 'rgba(15,23,42,0.85)',
+            padding: '12px 16px',
+            borderRadius: '12px',
+            border: '1px solid rgba(99,102,241,0.35)',
           }}
         >
           <div
             style={{
               width: '20px',
               height: '20px',
-              border: '2px solid #90A4AE',
+              border: '2px solid rgba(148,163,184,0.6)',
               borderTop: '2px solid transparent',
               borderRadius: '50%',
-              animation: 'spin 1s linear infinite'
+              animation: 'spin 1s linear infinite',
             }}
           />
-          Loading knowledge graph...
+          Initializing knowledge graph…
         </div>
       )}
-      
-      {/* Add navigation instructions */}
-      <div
-        style={{
-          position: 'absolute',
-          top: '10px',
-          right: '16px',
-          backgroundColor: 'rgba(0, 0, 0, 0.7)',
-          color: '#fff',
-          padding: '8px 12px',
-          borderRadius: '4px',
-          fontSize: '12px',
-          fontFamily: 'Inter, system-ui, sans-serif',
-          zIndex: 10,
-          lineHeight: '1.4'
-        }}
-      >
-        <div>🖱️ <strong>Navigation:</strong></div>
-        <div>• Drag to pan</div>
-        <div>• Scroll to zoom</div>
-        <div>• Double-click background to reset view</div>
-        <div>• Drag nodes to reposition (stays pinned)</div>
-        <div>• Double-click node to release from pinned position</div>
-      </div>
 
       <style>{`
         @keyframes spin {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
         }
-        
-        .d3-graph-container {
-          font-family: 'Inter', system-ui, sans-serif;
-          cursor: grab;
-        }
-        
-        .d3-graph-container:active {
-          cursor: grabbing;
-        }
-        
-        .nodes circle.selected {
-          filter: drop-shadow(0 0 10px rgba(255, 213, 79, 0.8));
-        }
-        
-        .links line {
-          transition: stroke-opacity 0.3s ease;
-        }
-        
-        .nodes circle {
-          transition: opacity 0.3s ease, r 0.2s ease;
-        }
-        
-        .labels text {
-          transition: opacity 0.3s ease;
-        }
       `}</style>
     </div>
   );
 };
 
-export default GraphVisualization; 
+export default GraphVisualization;

@@ -80,7 +80,7 @@ const HomePage: React.FC = () => {
   const [isGitHubConnected, setIsGitHubConnected] = useState(false);
   const [showGitHubRepoPicker, setShowGitHubRepoPicker] = useState(false);
   const [githubImportMessage, setGitHubImportMessage] = useState<string | null>(
-    null
+    null,
   );
   // Create LLM service once (doesn't need token updates)
   const [llmService] = useState(() => new LLMService());
@@ -125,7 +125,7 @@ const HomePage: React.FC = () => {
 
   // Track which commits have graphs stored & current loading state
   const [analyzedCommits, setAnalyzedCommits] = useState<Set<string>>(
-    new Set()
+    new Set(),
   );
   const [loadingCommitSha, setLoadingCommitSha] = useState<string | null>(null);
   const [currentRepoInfo, setCurrentRepoInfo] = useState<{
@@ -133,10 +133,13 @@ const HomePage: React.FC = () => {
     repo: string;
   } | null>(null);
   const [currentCommitSha, setCurrentCommitSha] = useState<string | null>(null); // Track which commit's graph is currently displayed
-  
+  const [isGraphFullScreen, setIsGraphFullScreen] = useState(false);
+
   // Enhanced progress tracking
   const [loadingStage, setLoadingStage] = useState<string>("");
-  const [loadingProgress, setLoadingProgress] = useState<number | undefined>(undefined);
+  const [loadingProgress, setLoadingProgress] = useState<number | undefined>(
+    undefined,
+  );
 
   // Use settings hook for LLM configuration
   const {
@@ -147,10 +150,8 @@ const HomePage: React.FC = () => {
   } = useSettings();
 
   // Local graph persistence hook (IndexedDB) for instant reload
-  const {
-    restoreLastSession,
-    isLoading: localPersistenceLoading,
-  } = useLocalGraphPersistence();
+  const { restoreLastSession, isLoading: localPersistenceLoading } =
+    useLocalGraphPersistence();
 
   // Auto-restore last session on mount
   const [autoRestoreAttempted, setAutoRestoreAttempted] = useState(false);
@@ -174,7 +175,7 @@ const HomePage: React.FC = () => {
           }));
 
           // Extract repo info from repoId if it's a GitHub repo
-          if (restored.repoId.startsWith('github:')) {
+          if (restored.repoId.startsWith("github:")) {
             const match = restored.repoId.match(/^github:([^/]+)\/([^@]+)/);
             if (match) {
               setCurrentRepoInfo({ owner: match[1], repo: match[2] });
@@ -215,19 +216,25 @@ const HomePage: React.FC = () => {
   useEffect(() => {
     if (currentRepoInfo && currentRepoHistory) {
       const storedCommitShas = new Set(
-        currentRepoHistory.commits.map((c) => c.commitSha)
+        currentRepoHistory.commits.map((c) => c.commitSha),
       );
       setAnalyzedCommits(storedCommitShas);
       console.log(
-        `📊 Synced ${storedCommitShas.size} analyzed commits for ${currentRepoInfo.owner}/${currentRepoInfo.repo}`
+        `📊 Synced ${storedCommitShas.size} analyzed commits for ${currentRepoInfo.owner}/${currentRepoInfo.repo}`,
       );
-      
+
       // Auto-load the latest commit's graph if available
       if (currentRepoHistory.commits.length > 0 && !currentCommitSha) {
         // Commits are stored newest first, so first one is latest
         const latestCommit = currentRepoHistory.commits[0];
-        console.log(`🔄 Auto-loading latest commit graph: ${latestCommit.commitSha.substring(0, 7)}`);
-        loadGraph(currentRepoInfo.owner, currentRepoInfo.repo, latestCommit.commitSha)
+        console.log(
+          `🔄 Auto-loading latest commit graph: ${latestCommit.commitSha.substring(0, 7)}`,
+        );
+        loadGraph(
+          currentRepoInfo.owner,
+          currentRepoInfo.repo,
+          latestCommit.commitSha,
+        )
           .then((graph) => {
             if (graph) {
               setCurrentCommitSha(latestCommit.commitSha);
@@ -239,7 +246,13 @@ const HomePage: React.FC = () => {
           });
       }
     }
-  }, [currentRepoInfo, currentRepoHistory, currentCommitSha, loadGraph, updateState]);
+  }, [
+    currentRepoInfo,
+    currentRepoHistory,
+    currentCommitSha,
+    loadGraph,
+    updateState,
+  ]);
 
   // Fetch repo history when repo is selected
   useEffect(() => {
@@ -247,7 +260,7 @@ const HomePage: React.FC = () => {
       fetchRepoHistory(currentRepoInfo.owner, currentRepoInfo.repo).catch(
         (err) => {
           console.warn("Failed to fetch repo history:", err);
-        }
+        },
       );
     }
   }, [currentRepoInfo, fetchRepoHistory]);
@@ -265,7 +278,7 @@ const HomePage: React.FC = () => {
   }, [state.githubUrl, currentRepoInfo]);
 
   const handleFileUpload = async (
-    event: React.ChangeEvent<HTMLInputElement>
+    event: React.ChangeEvent<HTMLInputElement>,
   ) => {
     const file = event.target.files?.[0];
     if (!file || !file.name.endsWith(".zip")) {
@@ -273,7 +286,7 @@ const HomePage: React.FC = () => {
       return;
     }
 
-      try {
+    try {
       setLoadingStage("Extracting");
       updateState({
         isProcessing: true,
@@ -342,7 +355,7 @@ const HomePage: React.FC = () => {
       console.log(
         `🔑 Using GitHub token for repo processing: ${
           githubToken ? "YES" : "NO"
-        }`
+        }`,
       );
 
       // Create ingestion service with GitHub token for authenticated requests
@@ -363,16 +376,28 @@ const HomePage: React.FC = () => {
           fileExtensions: state.fileExtensions,
           onProgress: (message: string) => {
             // Update stage based on message
-            if (message.includes("Downloading") || message.includes("archive")) {
+            if (
+              message.includes("Downloading") ||
+              message.includes("archive")
+            ) {
               setLoadingStage("Downloading");
               setLoadingProgress(20);
-            } else if (message.includes("Extracting") || message.includes("Discovered")) {
+            } else if (
+              message.includes("Extracting") ||
+              message.includes("Discovered")
+            ) {
               setLoadingStage("Extracting");
               setLoadingProgress(40);
-            } else if (message.includes("Generating") || message.includes("Parsing")) {
+            } else if (
+              message.includes("Generating") ||
+              message.includes("Parsing")
+            ) {
               setLoadingStage("Analyzing");
               setLoadingProgress(60);
-            } else if (message.includes("Resolving") || message.includes("Call")) {
+            } else if (
+              message.includes("Resolving") ||
+              message.includes("Call")
+            ) {
               setLoadingStage("Building Graph");
               setLoadingProgress(80);
             }
@@ -400,7 +425,7 @@ const HomePage: React.FC = () => {
             {
               maxCommits: 100,
               includeDiffs: false,
-            }
+            },
           );
 
           // Get latest commit info if available (first commit is newest after sort reversal)
@@ -424,7 +449,7 @@ const HomePage: React.FC = () => {
           console.log(
             `📤 Storing graph for ${repo.owner}/${
               repo.name
-            }@${latestCommitSha.substring(0, 7)}...`
+            }@${latestCommitSha.substring(0, 7)}...`,
           );
 
           await storeGraph(
@@ -433,10 +458,10 @@ const HomePage: React.FC = () => {
             latestCommitSha,
             latestCommitMessage,
             latestCommitDate,
-            result.graph
+            result.graph,
           );
           console.log(
-            `✅ Graph stored on server for ${repo.owner}/${repo.name}`
+            `✅ Graph stored on server for ${repo.owner}/${repo.name}`,
           );
 
           // Mark this commit as analyzed
@@ -455,7 +480,7 @@ const HomePage: React.FC = () => {
         showWelcome: false,
       });
       setGitHubImportMessage(
-        "Repository successfully added to your knowledge graph"
+        "Repository successfully added to your knowledge graph",
       );
       setShowGitHubRepoPicker(false);
     } catch (error) {
@@ -509,13 +534,22 @@ const HomePage: React.FC = () => {
           if (message.includes("Downloading")) {
             setLoadingStage("Downloading");
             setLoadingProgress(20);
-          } else if (message.includes("Extracting") || message.includes("Discovered")) {
+          } else if (
+            message.includes("Extracting") ||
+            message.includes("Discovered")
+          ) {
             setLoadingStage("Extracting");
             setLoadingProgress(40);
-          } else if (message.includes("Generating") || message.includes("Parsing")) {
+          } else if (
+            message.includes("Generating") ||
+            message.includes("Parsing")
+          ) {
             setLoadingStage("Analyzing");
             setLoadingProgress(60);
-          } else if (message.includes("Resolving") || message.includes("Call")) {
+          } else if (
+            message.includes("Resolving") ||
+            message.includes("Call")
+          ) {
             setLoadingStage("Building Graph");
             setLoadingProgress(80);
           }
@@ -530,7 +564,7 @@ const HomePage: React.FC = () => {
         commit.sha,
         commit.message,
         commit.author?.date || new Date().toISOString(),
-        result.graph
+        result.graph,
       );
 
       // Update state
@@ -546,7 +580,7 @@ const HomePage: React.FC = () => {
       // Mark as analyzed
       setAnalyzedCommits((prev) => new Set([...prev, commit.sha]));
       console.log(
-        `✅ Analyzed and stored graph for commit ${commit.sha.substring(0, 7)}`
+        `✅ Analyzed and stored graph for commit ${commit.sha.substring(0, 7)}`,
       );
     } catch (error) {
       console.error("Failed to analyze commit:", error);
@@ -653,7 +687,7 @@ const HomePage: React.FC = () => {
                 progress: `[${processed + 1}/${totalCommits}] ${message}`,
               });
             },
-          }
+          },
         );
 
         // Store graph for this commit
@@ -663,7 +697,7 @@ const HomePage: React.FC = () => {
           commit.sha,
           commit.message,
           commit.author?.date || new Date().toISOString(),
-          result.graph
+          result.graph,
         );
 
         successful.push(commit.sha);
@@ -671,7 +705,7 @@ const HomePage: React.FC = () => {
         processed++;
 
         console.log(
-          `✅ [${processed}/${totalCommits}] Analyzed commit ${commit.sha.substring(0, 7)}`
+          `✅ [${processed}/${totalCommits}] Analyzed commit ${commit.sha.substring(0, 7)}`,
         );
       } catch (error) {
         const errorMessage =
@@ -680,7 +714,7 @@ const HomePage: React.FC = () => {
         processed++;
         console.error(
           `❌ [${processed}/${totalCommits}] Failed to analyze commit ${commit.sha.substring(0, 7)}:`,
-          error
+          error,
         );
       } finally {
         setLoadingCommitSha(null);
@@ -734,6 +768,7 @@ const HomePage: React.FC = () => {
       showStats: false,
     });
     setShowNewProjectWarning(false);
+    setIsGraphFullScreen(false);
   };
 
   const cancelNewProject = () => {
@@ -743,7 +778,7 @@ const HomePage: React.FC = () => {
   const handleDownloadGraph = () => {
     if (!state.graph) {
       alert(
-        "No knowledge graph to download. Please process a repository first."
+        "No knowledge graph to download. Please process a repository first.",
       );
       return;
     }
@@ -773,7 +808,7 @@ const HomePage: React.FC = () => {
             prettyPrint: true,
             includeMetadata: true,
           },
-          state.fileContents
+          state.fileContents,
         );
         console.log("Knowledge graph exported as JSON successfully");
       }
@@ -806,503 +841,926 @@ const HomePage: React.FC = () => {
     state.graph.relationships &&
     Array.isArray(state.graph.relationships);
 
-  // EulonAI-inspired dark, neon palette to match landing + GitHub integration
   const colors = {
-    background: "#020617", // near-black slate
-    surface: "#020617",
-    surfaceWarm: "#020617",
-    primary: "#6366F1", // indigo
-    primaryLight: "#818CF8",
-    secondary: "#22D3EE", // cyan
-    accent: "#22C55E", // neon green
-    text: "#E5E7EB", // slate-200
-    textSecondary: "#9CA3AF", // slate-400
-    textMuted: "#64748B", // slate-500
-    border: "#1F2937", // slate-800
-    borderLight: "#111827", // slate-900
-    success: "#22C55E",
-    warning: "#FACC15",
-    error: "#F97373",
+    background: "#010314",
+    backgroundAlt: "#080c1a",
+    surface: "rgba(10, 15, 30, 0.9)",
+    surfaceAlt: "rgba(15, 25, 45, 0.7)",
+    surfaceBorder: "rgba(148, 163, 184, 0.35)",
+    surfaceWarm: "rgba(59, 66, 100, 0.45)",
+    primary: "#38bdf8",
+    primaryLight: "#67e8f9",
+    primaryDark: "#0ea5e9",
+    secondary: "#a855f7",
+    secondaryLight: "#d8b4fe",
+    accent: "#f97316",
+    accentLight: "#fdba74",
+    text: "#f8fafc",
+    textSecondary: "#cbd5f5",
+    textTertiary: "#94a3b8",
+    textMuted: "#6b7a90",
+    border: "rgba(148, 163, 184, 0.25)",
+    borderDark: "rgba(148, 163, 184, 0.45)",
+    success: "#22c55e",
+    warning: "#fbbf24",
+    error: "#f87171",
+    errorLight: "rgba(248, 113, 113, 0.18)",
   };
 
-  // Modern styles with warm theme
   const styles = {
     container: {
-      display: "flex",
-      flexDirection: "column" as const,
-      minHeight: "100vh",
-      minWidth: "100vw",
-      height: "100vh",
-      width: "100vw",
-      maxHeight: "100vh",
-      maxWidth: "100vw",
-      background:
-        "radial-gradient(circle at top left, rgba(88,28,135,0.55), transparent 55%), radial-gradient(circle at bottom right, rgba(14,165,233,0.5), transparent 55%), #020617",
-      fontFamily:
-        "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-      overflow: "hidden",
-      boxSizing: "border-box" as const,
-    },
-
-    // Top navbar (only visible when project is loaded)
-    navbar: {
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      padding: "12px 24px",
-      background:
-        "linear-gradient(90deg, rgba(15,23,42,0.95), rgba(30,64,175,0.9))",
-      borderBottom: `1px solid ${colors.borderLight}`,
-      boxShadow: "0 16px 40px rgba(15,23,42,0.8)",
       position: "relative" as const,
-    },
-
-    navbarContent: {
-      display: "flex",
-      alignItems: "center",
-      gap: "16px",
-      fontSize: "14px",
-      fontWeight: "500",
-      color: colors.text,
-    },
-
-    navbarButton: {
-      padding: "8px 16px",
-      backgroundColor: colors.surfaceWarm,
-      border: `1px solid ${colors.border}`,
-      borderRadius: "8px",
-      color: colors.text,
-      fontSize: "14px",
-      fontWeight: "500",
-      cursor: "pointer",
-      transition: "all 0.2s ease",
-      display: "flex",
-      alignItems: "center",
-      gap: "8px",
-    },
-
-    // Welcome screen (full page, no box)
-    welcomeOverlay: {
-      position: "fixed" as const,
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
+      minHeight: "100vh",
       height: "100vh",
-      width: "100vw",
-      background:
-        "radial-gradient(circle at top left, rgba(76,29,149,0.7), transparent 55%), radial-gradient(circle at bottom right, rgba(8,47,73,0.9), transparent 55%), #020617",
-      display: "flex",
-      flexDirection: "column" as const,
-      alignItems: "center",
-      justifyContent: "center",
-      zIndex: 1000,
-      overflowY: "auto" as const,
-      overflowX: "hidden" as const,
-      padding: "16px 20px",
-      boxSizing: "border-box" as const,
-    },
-
-    welcomeCard: {
-      background: "transparent",
-      borderRadius: "0",
-      padding: "0",
-      boxShadow: "none",
-      border: "none",
-      maxWidth: "700px",
       width: "100%",
-      textAlign: "center" as const,
-      margin: "auto",
+      background:
+        "radial-gradient(circle at 5% 15%, rgba(56,189,248,0.2), transparent 45%)," +
+        "radial-gradient(circle at 80% 10%, rgba(168,85,247,0.2), transparent 35%)," +
+        colors.background,
+      color: colors.text,
+      padding: "32px",
       boxSizing: "border-box" as const,
+      overflow: "hidden",
+      fontFamily:
+        "'Space Grotesk', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
       display: "flex",
       flexDirection: "column" as const,
-      gap: "10px",
-      overflow: "visible" as const,
-      maxHeight: "100%",
+      overflow: "hidden",
     },
 
-    welcomeTitle: {
-      fontSize: "22px",
-      fontWeight: "700",
-      color: colors.text,
-      marginBottom: "6px",
+    mainContent: {
+      display: "flex",
+      flexDirection: "column" as const,
+      flex: "1 1 auto",
+      minHeight: 0,
+      height: "100%",
+      overflow: "hidden",
+      gap: "24px",
+    },
+
+    welcomeOverlay: {
+      position: "relative" as const,
+      width: "100%",
+      minHeight: "100vh",
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      gap: "8px",
+      padding: "32px 24px",
     },
 
-    welcomeSubtitle: {
+    heroGrid: {
+      display: "grid",
+      gridTemplateColumns: "minmax(0, 1.6fr) minmax(340px, 1fr)",
+      gap: "32px",
+      width: "min(1200px, 95vw)",
+    },
+
+    heroPanel: {
+      background:
+        "linear-gradient(140deg, rgba(2,6,23,0.92) 0%, rgba(8,47,73,0.95) 45%, rgba(30,27,75,0.9) 100%)",
+      borderRadius: "32px",
+      padding: "40px",
+      border: `1px solid ${colors.borderDark}`,
+      boxShadow: "0 40px 120px rgba(2,6,23,0.65)",
+      position: "relative" as const,
+      overflow: "hidden",
+    },
+
+    heroBadge: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: "8px",
+      padding: "6px 14px",
+      borderRadius: "999px",
+      fontSize: "12px",
+      letterSpacing: "0.2em",
+      textTransform: "uppercase" as const,
+      background: "rgba(56,189,248,0.15)",
+      border: `1px solid ${colors.border}`,
+      color: colors.textSecondary,
+    },
+
+    heroTitle: {
+      fontSize: "46px",
+      lineHeight: 1.1,
+      margin: "24px 0 12px",
+      fontWeight: 600,
+      textShadow: "0 15px 40px rgba(0,0,0,0.45)",
+    },
+
+    heroSubtitle: {
+      fontSize: "16px",
+      color: colors.textSecondary,
+      lineHeight: 1.6,
+      maxWidth: "520px",
+    },
+
+    heroStats: {
+      marginTop: "32px",
+      display: "grid",
+      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+      gap: "16px",
+    },
+
+    heroStatCard: {
+      padding: "18px",
+      borderRadius: "20px",
+      border: `1px solid ${colors.border}`,
+      background: "rgba(255,255,255,0.03)",
+      backdropFilter: "blur(18px)",
+      display: "flex",
+      flexDirection: "column" as const,
+      gap: "4px",
+    },
+
+    heroStatLabel: {
+      fontSize: "12px",
+      textTransform: "uppercase" as const,
+      letterSpacing: "0.2em",
+      color: colors.textMuted,
+    },
+
+    heroStatValue: {
+      fontSize: "32px",
+      fontWeight: 600,
+    },
+
+    heroStatMeta: {
       fontSize: "13px",
       color: colors.textSecondary,
-      marginBottom: "14px",
-      lineHeight: "1.4",
+    },
+
+    heroTimeline: {
+      marginTop: "36px",
+      display: "flex",
+      flexDirection: "column" as const,
+      gap: "14px",
+    },
+
+    timelineItem: {
+      display: "flex",
+      alignItems: "center",
+      gap: "12px",
+      padding: "10px 14px",
+      borderRadius: "14px",
+      background: "rgba(255,255,255,0.02)",
+      border: `1px solid ${colors.border}`,
+    },
+
+    timelineAccent: {
+      width: "32px",
+      height: "32px",
+      borderRadius: "12px",
+      background: "rgba(56,189,248,0.12)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontWeight: 600,
+      color: colors.primaryLight,
+    },
+
+    actionPanel: {
+      display: "flex",
+      flexDirection: "column" as const,
+      gap: "24px",
+    },
+
+    actionCard: {
+      background: colors.surface,
+      borderRadius: "28px",
+      border: `1px solid ${colors.surfaceBorder}`,
+      padding: "26px",
+      boxShadow: "0 30px 80px rgba(2,6,23,0.55)",
     },
 
     inputSection: {
       display: "flex",
       flexDirection: "column" as const,
-      gap: "24px",
-      marginBottom: "32px",
+      gap: "20px",
     },
 
     inputGroup: {
       display: "flex",
       flexDirection: "column" as const,
-      gap: "8px",
+      gap: "6px",
       textAlign: "left" as const,
     },
 
     label: {
-      fontSize: "14px",
-      fontWeight: "600",
-      color: colors.text,
+      fontSize: "12px",
+      textTransform: "uppercase" as const,
+      letterSpacing: "0.2em",
+      color: colors.textMuted,
     },
 
     input: {
-      padding: "16px",
-      border: `2px solid ${colors.border}`,
+      padding: "12px 14px",
       borderRadius: "12px",
-      fontSize: "16px",
-      backgroundColor: colors.surfaceWarm,
+      border: `1px solid ${colors.border}`,
+      background: "rgba(2,6,23,0.8)",
       color: colors.text,
-      transition: "all 0.2s ease",
-      outline: "none",
+      fontSize: "14px",
+      fontFamily: "inherit",
+      transition: "border 0.2s ease, box-shadow 0.2s ease",
     },
 
     primaryButton: {
-      padding: "16px 32px",
-      backgroundColor: colors.primary,
+      padding: "14px 20px",
+      borderRadius: "999px",
       border: "none",
-      borderRadius: "12px",
-      color: "white",
-      fontSize: "16px",
-      fontWeight: "600",
+      background:
+        "linear-gradient(120deg, #38bdf8 0%, #6366f1 45%, #a855f7 100%)",
+      color: "#0b1120",
+      fontWeight: 600,
+      fontSize: "14px",
       cursor: "pointer",
-      transition: "all 0.2s ease",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: "8px",
+      boxShadow: "0 20px 60px rgba(56,189,248,0.35)",
+      transition: "transform 0.2s ease",
+    },
+
+    secondaryButton: {
+      padding: "12px 18px",
+      borderRadius: "14px",
+      border: `1px solid ${colors.border}`,
+      background: "transparent",
+      color: colors.text,
+      fontSize: "14px",
+      fontWeight: 500,
+      cursor: "pointer",
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
       gap: "8px",
     },
 
-    secondaryButton: {
-      padding: "10px 20px",
-      backgroundColor: colors.surfaceWarm,
-      border: `2px solid ${colors.border}`,
-      borderRadius: "10px",
+    ghostButton: {
+      padding: "10px 16px",
+      borderRadius: "14px",
+      border: `1px solid ${colors.border}`,
+      background: "rgba(255,255,255,0.02)",
       color: colors.text,
       fontSize: "13px",
-      fontWeight: "500",
+      fontWeight: 500,
+      display: "flex",
+      alignItems: "center",
+      gap: "8px",
+      cursor: "pointer",
+    },
+
+    topBar: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: "20px",
+      padding: "20px 28px",
+      borderRadius: "26px",
+      background: colors.surface,
+      border: `1px solid ${colors.surfaceBorder}`,
+      boxShadow: "0 25px 60px rgba(2,6,23,0.55)",
+    },
+
+    brand: {
+      display: "flex",
+      flexDirection: "column" as const,
+      gap: "4px",
+    },
+
+    brandName: {
+      fontSize: "18px",
+      letterSpacing: "0.38em",
+      textTransform: "uppercase" as const,
+      fontWeight: 600,
+    },
+
+    brandSubtitle: {
+      fontSize: "13px",
+      color: colors.textMuted,
+    },
+
+    chipRow: {
+      display: "flex",
+      flexWrap: "wrap" as const,
+      gap: "12px",
+      justifyContent: "center",
+    },
+
+    infoChip: {
+      display: "flex",
+      alignItems: "center",
+      gap: "8px",
+      padding: "10px 14px",
+      borderRadius: "999px",
+      border: `1px solid ${colors.border}`,
+      background: "rgba(255,255,255,0.03)",
+      fontSize: "13px",
+      color: colors.textSecondary,
+    },
+
+    controlDock: {
+      display: "flex",
+      alignItems: "center",
+      gap: "10px",
+    },
+
+    workspace: {
+      marginTop: "0",
+      display: "grid",
+      gridTemplateColumns: "minmax(0, 2fr) minmax(320px, 1fr)",
+      gap: "24px",
+      flex: 1,
+      minHeight: 0,
+      height: "100%",
+      alignItems: "stretch",
+    },
+
+    workspaceFullscreen: {
+      gridTemplateColumns: "1fr",
+    },
+
+    graphPanel: {
+      background: colors.surface,
+      borderRadius: "32px",
+      border: `1px solid ${colors.surfaceBorder}`,
+      overflow: "hidden",
+      display: "flex",
+      flexDirection: "column" as const,
+      minHeight: 0,
+      height: "100%",
+    },
+    graphFullSpan: {
+      gridColumn: "1 / -1",
+    },
+
+    chatPanel: {
+      background: colors.surface,
+      borderRadius: "32px",
+      border: `1px solid ${colors.surfaceBorder}`,
+      overflow: "hidden",
+      display: "flex",
+      flexDirection: "column" as const,
+      minHeight: 0,
+      height: "100%",
+    },
+
+    panelHeader: {
+      padding: "20px 24px",
+      borderBottom: `1px solid ${colors.surfaceBorder}`,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      color: colors.textSecondary,
+    },
+
+    panelHeaderRight: {
+      display: "flex",
+      alignItems: "center",
+      gap: "10px",
+    },
+
+    smallIconButton: {
+      border: `1px solid ${colors.border}`,
+      borderRadius: "12px",
+      background: "rgba(255,255,255,0.02)",
+      color: colors.text,
+      padding: "6px 12px",
+      fontSize: "12px",
       cursor: "pointer",
       transition: "all 0.2s ease",
     },
 
-    orDivider: {
-      display: "flex",
-      alignItems: "center",
-      gap: "16px",
-      margin: "20px 0",
-      color: colors.textMuted,
-      fontSize: "14px",
-      fontWeight: "500",
+    statsPanel: {
+      marginTop: "20px",
+      background: colors.surfaceAlt,
+      border: `1px solid ${colors.surfaceBorder}`,
+      borderRadius: "24px",
+      padding: "24px",
+      boxShadow: "0 20px 60px rgba(2,6,23,0.45)",
     },
 
-    orLine: {
-      flex: 1,
-      height: "1px",
-      backgroundColor: colors.border,
+    statsSectionTitle: {
+      fontSize: "16px",
+      fontWeight: 600,
+      marginBottom: "16px",
+      color: colors.textSecondary,
     },
 
-    // Main layout (when project is loaded)
-    mainLayout: {
-      display: "flex",
-      flex: 1,
-      overflow: "hidden",
+    statsGrid: {
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+      gap: "18px",
     },
 
-    // Left side - Knowledge Graph (70% width)
-    leftPanel: {
-      flex: "0 0 70%",
-      background:
-        "radial-gradient(circle at top left, rgba(55,65,81,0.7), transparent 60%), #020617",
-      borderRight: `1px solid ${colors.borderLight}`,
-      overflow: "hidden",
-    },
-
-    // Right side - Chat (30% width)
-    rightPanel: {
-      flex: "0 0 30%",
-      background:
-        "radial-gradient(circle at top right, rgba(30,64,175,0.7), transparent 60%), #020617",
-      overflow: "hidden",
-    },
-
-    // Error and progress styles
-    errorBanner: {
-      backgroundColor: "#FEF2F2",
-      border: `1px solid #FECACA`,
-      color: colors.error,
+    statsBlock: {
       padding: "16px",
-      borderRadius: "12px",
-      margin: "16px 0",
-      fontSize: "14px",
+      borderRadius: "18px",
+      background: "rgba(255,255,255,0.02)",
+      border: `1px solid ${colors.surfaceBorder}`,
+      fontSize: "13px",
+      color: colors.textSecondary,
+    },
+
+    statBadge: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: "8px",
+      padding: "6px 12px",
+      borderRadius: "999px",
+      background: "rgba(56,189,248,0.12)",
+      color: colors.primaryLight,
+      fontSize: "12px",
+      textTransform: "uppercase" as const,
+      letterSpacing: "0.1em",
+    },
+
+    errorBanner: {
+      background: colors.errorLight,
+      border: `1px solid ${colors.error}`,
+      color: colors.error,
+      padding: "12px 14px",
+      borderRadius: "14px",
+      fontSize: "13px",
     },
 
     progressBanner: {
-      backgroundColor: "#FEF3C7",
-      border: `1px solid ${colors.border}`,
-      color: colors.secondary,
-      padding: "16px",
-      borderRadius: "12px",
-      margin: "16px 0",
-      fontSize: "14px",
+      background: "rgba(34,197,94,0.12)",
+      border: `1px solid rgba(34,197,94,0.35)`,
+      color: colors.success,
+      padding: "12px 14px",
+      borderRadius: "14px",
+      fontSize: "13px",
       display: "flex",
       alignItems: "center",
-      gap: "12px",
+      gap: "10px",
     },
 
     spinner: {
-      width: "20px",
-      height: "20px",
+      width: "16px",
+      height: "16px",
       border: `2px solid ${colors.border}`,
       borderTop: `2px solid ${colors.primary}`,
       borderRadius: "50%",
-      animation: "spin 1s linear infinite",
+      animation: "spin 0.8s linear infinite",
     },
   };
 
-  const renderWelcomeScreen = () => (
-    <div style={styles.welcomeOverlay}>
-      <div style={styles.welcomeCard}>
-        <div
-          style={{ ...styles.welcomeTitle }}
-          className="welcome-title-responsive"
-        >
-          <span>🔍</span>
-          <span>EulonAI</span>
-        </div>
-        <div
-          style={{ ...styles.welcomeSubtitle }}
-          className="welcome-subtitle-responsive"
-        >
-          Transform your codebase into an interactive knowledge graph
-        </div>
+  const renderWelcomeScreen = () => {
+    const heroSteps = [
+      {
+        label: "01",
+        title: "Connect & sync",
+        detail: "Secure OAuth with GitHub, including private repositories.",
+      },
+      {
+        label: "02",
+        title: "Index the graph",
+        detail: "Generate call graphs, ownership, and dependency edges in minutes.",
+      },
+      {
+        label: "03",
+        title: "Collaborate with AI",
+        detail: "Chat with a contextual twin that understands every commit and file.",
+      },
+    ];
 
-        {state.error && <div style={styles.errorBanner}>{state.error}</div>}
+    const heroMetrics = [
+      {
+        label: "Graph nodes",
+        value: state.graph?.nodes?.length
+          ? state.graph.nodes.length.toLocaleString()
+          : "5k+",
+        meta: state.graph
+          ? "Nodes in current workspace"
+          : "Average nodes per repository",
+      },
+      {
+        label: "Insight latency",
+        value: state.isProcessing ? "Live" : "< 90s",
+        meta: "Typical ingestion time for 1000 files",
+      },
+    ];
 
-        {state.isProcessing && (
-          <div style={styles.progressBanner}>
-            <div style={styles.spinner}></div>
-            <div style={{ flex: 1 }}>
-              {loadingStage && (
-                <div style={{ fontSize: "12px", fontWeight: "600", marginBottom: "4px", color: colors.primary }}>
-                  {loadingStage}
+    return (
+      <div style={styles.welcomeOverlay}>
+        <div style={styles.heroGrid} data-layout="hero-grid">
+          <section style={styles.heroPanel} data-hero="intro">
+            <div style={styles.heroBadge}>Eulon Nexus / Cognitive Graph Suite</div>
+            <h1 style={styles.heroTitle}>
+              Ship confident refactors with a concierge-grade code atlas
+            </h1>
+            <p style={styles.heroSubtitle}>
+              Eulon Nexus analyzes repositories, threads together a semantic graph,
+              and gives your team a high-bandwidth canvas to explore architecture,
+              history, and intent without jumping across tabs.
+            </p>
+            {isGraphValid && (
+              <div style={{ marginTop: "20px" }}>
+                <button
+                  style={{
+                    ...styles.secondaryButton,
+                    borderColor: colors.primary,
+                    color: colors.primaryLight,
+                  }}
+                  onClick={() => updateState({ showWelcome: false })}
+                >
+                  ⬅️ Return to workspace
+                </button>
+              </div>
+            )}
+
+            <div style={styles.heroStats}>
+              {heroMetrics.map((metric) => (
+                <div key={metric.label} style={styles.heroStatCard}>
+                  <div style={styles.heroStatLabel}>{metric.label}</div>
+                  <div style={styles.heroStatValue}>{metric.value}</div>
+                  <div style={styles.heroStatMeta}>{metric.meta}</div>
                 </div>
-              )}
-              <div>{state.progress}</div>
-              {loadingProgress !== undefined && (
-                <div style={{ marginTop: "8px", width: "100%", height: "4px", backgroundColor: colors.border, borderRadius: "2px", overflow: "hidden" }}>
-                  <div style={{ width: `${loadingProgress}%`, height: "100%", backgroundColor: colors.primary, transition: "width 0.3s ease" }} />
+              ))}
+            </div>
+
+            <div style={styles.heroTimeline}>
+              {heroSteps.map((step) => (
+                <div key={step.label} style={styles.timelineItem}>
+                  <div style={styles.timelineAccent}>{step.label}</div>
+                  <div>
+                    <div
+                      style={{ fontWeight: 600, color: colors.text, fontSize: "15px" }}
+                    >
+                      {step.title}
+                    </div>
+                    <div style={{ color: colors.textSecondary, fontSize: "13px" }}>
+                      {step.detail}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section style={styles.actionPanel} data-hero="actions">
+            {state.error && (
+              <div
+                style={{
+                  ...styles.errorBanner,
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "10px",
+                }}
+              >
+                <span style={{ fontSize: "16px", flexShrink: 0 }}>⚠️</span>
+                <div>{state.error}</div>
+              </div>
+            )}
+
+            {state.isProcessing && (
+              <div style={styles.progressBanner}>
+                <div style={styles.spinner}></div>
+                <div style={{ flex: 1 }}>
+                  {loadingStage && (
+                    <div
+                      style={{
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        marginBottom: "4px",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.5px",
+                      }}
+                    >
+                      {loadingStage}
+                    </div>
+                  )}
+                  <div style={{ fontSize: "13px" }}>{state.progress}</div>
+                  {loadingProgress !== undefined && (
+                    <div
+                      style={{
+                        marginTop: "8px",
+                        width: "100%",
+                        height: "3px",
+                        backgroundColor: colors.border,
+                        borderRadius: "2px",
+                        overflow: "hidden",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: `${loadingProgress}%`,
+                          height: "100%",
+                          backgroundColor: colors.success,
+                          transition: "width 0.3s ease",
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div style={styles.actionCard}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: "12px",
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: "15px", fontWeight: 600 }}>GitHub Workspace</div>
+                  <div style={{ fontSize: "13px", color: colors.textSecondary }}>
+                    Authenticate once, then pull entire organizations into the graph.
+                  </div>
+                </div>
+                <div style={styles.statBadge}>OAuth</div>
+              </div>
+
+              <GitHubConnectCard
+                onConnected={() => {
+                  setIsGitHubConnected(true);
+                }}
+              />
+
+              <button
+                onClick={() => {
+                  if (!isGitHubConnected) {
+                    alert("Please connect your GitHub account first.");
+                    return;
+                  }
+                  setShowGitHubRepoPicker(true);
+                }}
+                style={{ ...styles.primaryButton, width: "100%" }}
+              >
+                <span>📡</span>
+                Launch repository selector
+              </button>
+
+              {githubImportMessage && (
+                <div
+                  style={{
+                    marginTop: "10px",
+                    fontSize: "12px",
+                    color: colors.textSecondary,
+                  }}
+                >
+                  {githubImportMessage}
                 </div>
               )}
             </div>
-          </div>
-        )}
 
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: "10px",
-            width: "100%",
-            maxWidth: "600px",
-            margin: "0 auto",
-          }}
-        >
-          <GitHubConnectCard
-            onConnected={() => {
-              setIsGitHubConnected(true);
-            }}
-          />
+            <div style={styles.actionCard}>
+              <div style={{ marginBottom: "12px" }}>
+                <div style={{ fontSize: "15px", fontWeight: 600 }}>Manual Upload</div>
+                <div style={{ fontSize: "13px", color: colors.textSecondary }}>
+                  Drop a ZIP archive to build a graph locally without credentials.
+                </div>
+              </div>
 
-          <button
-            onClick={() => {
-              if (!isGitHubConnected) {
-                alert("Please connect your GitHub account first.");
-                return;
-              }
-              setShowGitHubRepoPicker(true);
-            }}
-            style={styles.secondaryButton}
-            className="button-responsive"
-          >
-            Import from GitHub
-          </button>
+              <RepositoryInput
+                onZipFileSubmit={(file) =>
+                  handleFileUpload({
+                    target: { files: [file] },
+                  } as unknown as React.ChangeEvent<HTMLInputElement>)
+                }
+                disabled={state.isProcessing}
+              />
+            </div>
 
-          <RepositoryInput
-            onZipFileSubmit={(file) =>
-              handleFileUpload({
-                target: { files: [file] },
-              } as unknown as React.ChangeEvent<HTMLInputElement>)
-            }
-            disabled={state.isProcessing}
-          />
+            <button
+              onClick={() => updateState({ showSettings: true })}
+              style={{ ...styles.ghostButton, width: "100%" }}
+            >
+              ⚙️ Environment & provider settings
+            </button>
+          </section>
         </div>
-
-        <button
-          onClick={() => updateState({ showSettings: true })}
-          style={{ ...styles.secondaryButton, marginTop: "6px" }}
-          className="button-responsive"
-        >
-          ⚙️ Settings
-        </button>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderMainInterface = () => {
-    // Double-check graph validity before rendering
     if (!isGraphValid) {
       console.warn(
         "Attempted to render main interface with invalid graph:",
-        state.graph
+        state.graph,
       );
       return renderWelcomeScreen();
     }
 
+    const repoLabel = currentRepoInfo
+      ? `${currentRepoInfo.owner}/${currentRepoInfo.repo}`
+      : state.githubUrl
+        ? state.githubUrl.split("/").slice(-2).join("/")
+        : "Offline workspace";
+
+    const overviewChips = [
+      { icon: "🧠", label: `${state.graph?.nodes.length || 0} nodes` },
+      {
+        icon: "🕸️",
+        label: `${state.graph?.relationships.length || 0} relationships`,
+      },
+      { icon: "📁", label: `${state.fileContents?.size || 0} files` },
+    ];
+
+    const activeCommitLabel = (() => {
+      if (!currentCommitSha) return null;
+      const commit = commitTimeline?.commits.find(
+        (c) => c.sha === currentCommitSha,
+      );
+      const message = commit?.message.split("\n")[0] ?? "";
+      const trimmed =
+        message.length > 28 ? `${message.substring(0, 28)}…` : message;
+      return `${currentCommitSha.substring(0, 7)}${trimmed ? ` · ${trimmed}` : ""}`;
+    })();
+
+    const nodeStatsEntries = (() => {
+      if (!state.graph) return [];
+      const nodeStats: Record<string, number> = {};
+      state.graph.nodes.forEach((node) => {
+        nodeStats[node.label] = (nodeStats[node.label] || 0) + 1;
+      });
+      return Object.entries(nodeStats)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 6);
+    })();
+
+    const relationshipStatsEntries = (() => {
+      if (!state.graph) return [];
+      const relationshipStats: Record<string, number> = {};
+      state.graph.relationships.forEach((rel) => {
+        relationshipStats[rel.type] =
+          (relationshipStats[rel.type] || 0) + 1;
+      });
+      return Object.entries(relationshipStats)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 6);
+    })();
+
+    const sourceFileCount = Array.from(state.fileContents.keys()).filter(
+      (path) =>
+        path.endsWith(".py") ||
+        path.endsWith(".js") ||
+        path.endsWith(".ts") ||
+        path.endsWith(".tsx") ||
+        path.endsWith(".jsx"),
+    ).length;
+
+    const workspaceStyle = isGraphFullScreen
+      ? { ...styles.workspace, ...styles.workspaceFullscreen }
+      : styles.workspace;
+
+    const graphPanelStyle = isGraphFullScreen
+      ? { ...styles.graphPanel, ...styles.graphFullSpan }
+      : styles.graphPanel;
+
     return (
-      <>
-        {/* Top Navbar */}
-        <div style={styles.navbar} className="navbar-responsive">
-          <div
-            style={styles.navbarContent}
-            className="navbar-content-responsive"
-          >
-            <span>🔍 EulonAI</span>
-            <span>•</span>
-            <span>{state.graph?.nodes.length || 0} nodes</span>
-            <span>•</span>
-            <span>{state.graph?.relationships.length || 0} relationships</span>
-            <span>•</span>
-            <span>{state.fileContents?.size || 0} files</span>
-            {currentCommitSha && commitTimeline && (
-              <>
-                <span>•</span>
-                <span style={{ 
-                  color: colors.primary, 
-                  fontWeight: "600",
-                  fontSize: "13px"
-                }} title={`Currently viewing commit ${currentCommitSha.substring(0, 7)}`}>
-                  📌 {currentCommitSha.substring(0, 7)}
-                  {(() => {
-                    const commit = commitTimeline.commits.find(c => c.sha === currentCommitSha);
-                    if (commit) {
-                      const msg = commit.message.split('\n')[0];
-                      return ` - ${msg.length > 35 ? msg.substring(0, 35) + '...' : msg}`;
-                    }
-                    return '';
-                  })()}
-                </span>
-              </>
+      <div style={styles.mainContent}>
+        <div style={styles.topBar} data-layout="top-bar">
+          <div style={styles.brand}>
+            <div style={styles.brandName}>EULON NEXUS</div>
+            <div style={styles.brandSubtitle}>{repoLabel}</div>
+          </div>
+
+          <div style={styles.chipRow}>
+            {overviewChips.map((chip) => (
+              <div key={chip.label} style={styles.infoChip}>
+                <span>{chip.icon}</span>
+                <span>{chip.label}</span>
+              </div>
+            ))}
+            {activeCommitLabel && (
+              <div
+                style={{
+                  ...styles.infoChip,
+                  borderColor: colors.primary,
+                  color: colors.primaryLight,
+                }}
+              >
+                <span>📌</span>
+                <span>{activeCommitLabel}</span>
+              </div>
             )}
           </div>
-          <div
-            style={{
-              position: "absolute",
-              right: "24px",
-              display: "flex",
-              gap: "12px",
-            }}
-            className="navbar-buttons-responsive"
-          >
+
+          <div style={styles.controlDock}>
             <button
+              style={styles.ghostButton}
+              onClick={() => updateState({ showWelcome: true })}
+            >
+              🏠 Home
+            </button>
+            <button
+              style={styles.ghostButton}
               onClick={async () => {
                 updateState({ showHistory: true });
-                
-                // Determine repo info - use currentRepoInfo or extract from githubUrl
+
                 let repoInfo = currentRepoInfo;
-                
+
                 if (!repoInfo && state.githubUrl) {
-                  // Try to extract repo info from githubUrl if available
-                  const urlMatch = state.githubUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
+                  const urlMatch = state.githubUrl.match(
+                    /github\.com\/([^/]+)\/([^/]+)/,
+                  );
                   if (urlMatch) {
                     const [, owner, repo] = urlMatch;
                     repoInfo = { owner, repo };
                     setCurrentRepoInfo(repoInfo);
-                    console.log(`📦 Extracted repo info from URL: ${owner}/${repo}`);
+                    console.log(
+                      `📦 Extracted repo info from URL: ${owner}/${repo}`,
+                    );
                   }
                 }
-                
-                // If we have repo info but no commit timeline, fetch it
+
                 if (repoInfo && !commitTimeline && !historyLoading) {
                   try {
-                    console.log(`📜 Fetching commit history for ${repoInfo.owner}/${repoInfo.repo}...`);
-                    console.log(`🔑 GitHub token available: ${githubToken ? 'YES' : 'NO'}`);
-                    
+                    console.log(
+                      `📜 Fetching commit history for ${repoInfo.owner}/${repoInfo.repo}...`,
+                    );
+                    console.log(
+                      `🔑 GitHub token available: ${githubToken ? "YES" : "NO"}`,
+                    );
+
                     setLoadingStage("Fetching History");
                     setLoadingProgress(50);
-                    
+
                     const timeline = await fetchCommitHistory(
                       repoInfo.owner,
                       repoInfo.repo,
-                      { maxCommits: 100 }
+                      { maxCommits: 100 },
                     );
-                    
+
                     setLoadingStage("");
                     setLoadingProgress(undefined);
                     console.log(`✅ Successfully fetched commit history`);
-                    
-                    // Auto-load the latest commit's graph if available
+
                     if (timeline && timeline.commits.length > 0) {
-                      const latestCommit = timeline.commits[0]; // First commit is newest (after sort reversal)
+                      const latestCommit = timeline.commits[0];
                       const hasGraph = analyzedCommits.has(latestCommit.sha);
-                      
+
                       if (hasGraph && repoInfo) {
-                        console.log(`🔄 Auto-loading latest commit graph: ${latestCommit.sha.substring(0, 7)}`);
+                        console.log(
+                          `🔄 Auto-loading latest commit graph: ${latestCommit.sha.substring(0, 7)}`,
+                        );
                         try {
-                          const graph = await loadGraph(repoInfo.owner, repoInfo.repo, latestCommit.sha);
+                          const graph = await loadGraph(
+                            repoInfo.owner,
+                            repoInfo.repo,
+                            latestCommit.sha,
+                          );
                           if (graph) {
                             setCurrentCommitSha(latestCommit.sha);
                             updateState({ graph, fileContents: new Map() });
                           }
                         } catch (err) {
-                          console.warn("Failed to auto-load latest commit graph:", err);
+                          console.warn(
+                            "Failed to auto-load latest commit graph:",
+                            err,
+                          );
                         }
                       } else if (!hasGraph) {
-                        // If no graph exists, analyze the latest commit
-                        console.log(`🔄 Auto-analyzing latest commit: ${latestCommit.sha.substring(0, 7)}`);
+                        console.log(
+                          `🔄 Auto-analyzing latest commit: ${latestCommit.sha.substring(0, 7)}`,
+                        );
                         try {
                           const githubToken = getGitHubAccessToken();
-                          const ingestionService = new IngestionService(githubToken);
-                          const result = await ingestionService.processGitHubRepo(
-                            `https://github.com/${repoInfo.owner}/${repoInfo.repo}`,
-                            {
-                              directoryFilter: state.directoryFilter,
-                              fileExtensions: state.fileExtensions,
-                              ref: latestCommit.sha,
-                              onProgress: (message: string) => {
-                                updateState({ progress: message });
-                              },
-                            }
+                          const ingestionService = new IngestionService(
+                            githubToken,
                           );
+                          const result =
+                            await ingestionService.processGitHubRepo(
+                              `https://github.com/${repoInfo.owner}/${repoInfo.repo}`,
+                              {
+                                directoryFilter: state.directoryFilter,
+                                fileExtensions: state.fileExtensions,
+                                ref: latestCommit.sha,
+                                onProgress: (message: string) => {
+                                  updateState({ progress: message });
+                                },
+                              },
+                            );
                           await storeGraph(
                             repoInfo.owner,
                             repoInfo.repo,
                             latestCommit.sha,
                             latestCommit.message,
-                            latestCommit.author?.date || new Date().toISOString(),
-                            result.graph
+                            latestCommit.author?.date ||
+                              new Date().toISOString(),
+                            result.graph,
                           );
                           setCurrentCommitSha(latestCommit.sha);
-                          setAnalyzedCommits((prev) => new Set([...prev, latestCommit.sha]));
+                          setAnalyzedCommits(
+                            (prev) => new Set([...prev, latestCommit.sha]),
+                          );
                           updateState({
                             graph: result.graph,
                             fileContents: result.fileContents,
                             progress: "",
                           });
                         } catch (err) {
-                          console.warn("Failed to auto-analyze latest commit:", err);
+                          console.warn(
+                            "Failed to auto-analyze latest commit:",
+                            err,
+                          );
                         }
                       }
                     }
@@ -1310,85 +1768,64 @@ const HomePage: React.FC = () => {
                     console.error("❌ Failed to fetch commit history:", error);
                     setLoadingStage("");
                     setLoadingProgress(undefined);
-                    // Error is already handled by useCommitHistory hook and displayed in the modal
                   }
                 } else if (!repoInfo) {
-                  console.warn("⚠️ No repository info available. Cannot fetch commit history.");
+                  console.warn(
+                    "⚠️ No repository info available. Cannot fetch commit history.",
+                  );
                 }
               }}
-              style={{
-                ...styles.navbarButton,
-                backgroundColor: colors.surfaceWarm,
-                color: colors.text,
-              }}
-              className="navbar-button-responsive"
             >
-              <span>🕒</span>
-              History
+              🕒 History
             </button>
             <button
-              onClick={() => updateState({ showStats: !state.showStats })}
               style={{
-                ...styles.navbarButton,
+                ...styles.ghostButton,
                 backgroundColor: state.showStats
-                  ? colors.primary
-                  : colors.surfaceWarm,
-                color: state.showStats ? "#fff" : colors.text,
+                  ? "rgba(99,102,241,0.18)"
+                  : "rgba(255,255,255,0.02)",
+                borderColor: state.showStats ? colors.primary : colors.border,
+                color: state.showStats ? colors.primaryLight : colors.text,
               }}
-              className="navbar-button-responsive"
+              onClick={() => updateState({ showStats: !state.showStats })}
             >
-              <span>📊</span>
-              Stats
+              📊 Stats
             </button>
             <button
               onClick={handleDownloadGraph}
-              style={{
-                ...styles.navbarButton,
-                backgroundColor: state.graph ? colors.primary : colors.border,
-                color: state.graph ? "#fff" : colors.textMuted,
-                cursor: state.graph ? "pointer" : "not-allowed",
-                opacity: state.graph ? 1 : 0.6,
-              }}
               disabled={!state.graph}
-              className="navbar-button-responsive"
+              style={{
+                ...styles.primaryButton,
+                padding: "12px 18px",
+                borderRadius: "18px",
+                opacity: state.graph ? 1 : 0.5,
+                cursor: state.graph ? "pointer" : "not-allowed",
+              }}
             >
               <span>📥</span>
-              Download KG
+              Export graph
             </button>
             <button
               onClick={handleNewProject}
-              style={styles.navbarButton}
-              className="navbar-button-responsive"
+              style={{
+                ...styles.secondaryButton,
+                padding: "12px 18px",
+                borderRadius: "18px",
+              }}
             >
-              <span>🔄</span>
-              New Project
+              🔄 New project
             </button>
           </div>
         </div>
 
-        {/* Statistics Panel */}
         {state.showStats && state.graph && (
-          <div
-            style={{
-              backgroundColor: colors.surfaceWarm,
-              borderBottom: `1px solid ${colors.borderLight}`,
-              padding: "16px 24px",
-              fontSize: "14px",
-            }}
-          >
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-                gap: "24px",
-              }}
-              className="stats-grid-responsive"
-            >
-              {/* Node Statistics */}
-              <div>
+          <div style={styles.statsPanel}>
+            <div style={styles.statsSectionTitle}>Workspace diagnostics</div>
+            <div style={styles.statsGrid}>
+              <div style={styles.statsBlock}>
                 <div
                   style={{
-                    fontWeight: "600",
+                    fontWeight: 600,
                     color: colors.text,
                     marginBottom: "8px",
                     display: "flex",
@@ -1396,38 +1833,37 @@ const HomePage: React.FC = () => {
                     gap: "8px",
                   }}
                 >
-                  <span>🔵</span>
-                  Node Types
+                  <span>🔵</span> Node types
                 </div>
-                {(() => {
-                  const nodeStats: Record<string, number> = {};
-                  state.graph.nodes.forEach((node) => {
-                    nodeStats[node.label] = (nodeStats[node.label] || 0) + 1;
-                  });
-                  return Object.entries(nodeStats)
-                    .sort(([, a], [, b]) => b - a)
-                    .map(([type, count]) => (
-                      <div
-                        key={type}
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          color: colors.textSecondary,
-                          marginBottom: "4px",
-                        }}
-                      >
-                        <span>{type}:</span>
-                        <span style={{ fontWeight: "500" }}>{count}</span>
-                      </div>
-                    ));
-                })()}
+                {nodeStatsEntries.length === 0 ? (
+                  <div style={{ color: colors.textMuted }}>No data</div>
+                ) : (
+                  nodeStatsEntries.map(([type, count]) => (
+                    <div
+                      key={type}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        color: colors.textSecondary,
+                        marginBottom: "6px",
+                        padding: "6px 8px",
+                        borderRadius: "8px",
+                        background: "rgba(56,189,248,0.08)",
+                      }}
+                    >
+                      <span>{type}</span>
+                      <span style={{ color: colors.primaryLight }}>
+                        {count}
+                      </span>
+                    </div>
+                  ))
+                )}
               </div>
 
-              {/* Relationship Statistics */}
-              <div>
+              <div style={styles.statsBlock}>
                 <div
                   style={{
-                    fontWeight: "600",
+                    fontWeight: 600,
                     color: colors.text,
                     marginBottom: "8px",
                     display: "flex",
@@ -1435,39 +1871,37 @@ const HomePage: React.FC = () => {
                     gap: "8px",
                   }}
                 >
-                  <span>🔗</span>
-                  Relationship Types
+                  <span>🔗</span> Relationship mix
                 </div>
-                {(() => {
-                  const relationshipStats: Record<string, number> = {};
-                  state.graph.relationships.forEach((rel) => {
-                    relationshipStats[rel.type] =
-                      (relationshipStats[rel.type] || 0) + 1;
-                  });
-                  return Object.entries(relationshipStats)
-                    .sort(([, a], [, b]) => b - a)
-                    .map(([type, count]) => (
-                      <div
-                        key={type}
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          color: colors.textSecondary,
-                          marginBottom: "4px",
-                        }}
-                      >
-                        <span>{type}:</span>
-                        <span style={{ fontWeight: "500" }}>{count}</span>
-                      </div>
-                    ));
-                })()}
+                {relationshipStatsEntries.length === 0 ? (
+                  <div style={{ color: colors.textMuted }}>No data</div>
+                ) : (
+                  relationshipStatsEntries.map(([type, count]) => (
+                    <div
+                      key={type}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        color: colors.textSecondary,
+                        marginBottom: "6px",
+                        padding: "6px 8px",
+                        borderRadius: "8px",
+                        background: "rgba(168,85,247,0.08)",
+                      }}
+                    >
+                      <span>{type}</span>
+                      <span style={{ color: colors.secondaryLight }}>
+                        {count}
+                      </span>
+                    </div>
+                  ))
+                )}
               </div>
 
-              {/* File Statistics */}
-              <div>
+              <div style={styles.statsBlock}>
                 <div
                   style={{
-                    fontWeight: "600",
+                    fontWeight: 600,
                     color: colors.text,
                     marginBottom: "8px",
                     display: "flex",
@@ -1475,19 +1909,18 @@ const HomePage: React.FC = () => {
                     gap: "8px",
                   }}
                 >
-                  <span>📁</span>
-                  File Info
+                  <span>📁</span> Repository overview
                 </div>
                 <div
                   style={{
                     display: "flex",
                     justifyContent: "space-between",
+                    marginBottom: "6px",
                     color: colors.textSecondary,
-                    marginBottom: "4px",
                   }}
                 >
-                  <span>Total Files:</span>
-                  <span style={{ fontWeight: "500" }}>
+                  <span>Total files</span>
+                  <span style={{ color: colors.accentLight }}>
                     {state.fileContents.size}
                   </span>
                 </div>
@@ -1495,22 +1928,13 @@ const HomePage: React.FC = () => {
                   style={{
                     display: "flex",
                     justifyContent: "space-between",
+                    marginBottom: "6px",
                     color: colors.textSecondary,
-                    marginBottom: "4px",
                   }}
                 >
-                  <span>Source Files:</span>
-                  <span style={{ fontWeight: "500" }}>
-                    {
-                      Array.from(state.fileContents.keys()).filter(
-                        (path) =>
-                          path.endsWith(".py") ||
-                          path.endsWith(".js") ||
-                          path.endsWith(".ts") ||
-                          path.endsWith(".tsx") ||
-                          path.endsWith(".jsx")
-                      ).length
-                    }
+                  <span>Source files</span>
+                  <span style={{ color: colors.accentLight }}>
+                    {sourceFileCount}
                   </span>
                 </div>
                 <div
@@ -1518,22 +1942,11 @@ const HomePage: React.FC = () => {
                     display: "flex",
                     justifyContent: "space-between",
                     color: colors.textSecondary,
-                    marginBottom: "4px",
                   }}
                 >
-                  <span>Repository:</span>
-                  <span
-                    style={{
-                      fontWeight: "500",
-                      maxWidth: "120px",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {state.githubUrl
-                      ? state.githubUrl.split("/").slice(-2).join("/")
-                      : "ZIP Upload"}
+                  <span>Workspace</span>
+                  <span style={{ color: colors.accentLight }}>
+                    {repoLabel}
                   </span>
                 </div>
               </div>
@@ -1541,53 +1954,118 @@ const HomePage: React.FC = () => {
           </div>
         )}
 
-        {/* Main Layout */}
-        <div style={styles.mainLayout} className="main-layout-responsive">
-          {/* Left Panel - Knowledge Graph */}
-          <div style={styles.leftPanel} className="left-panel-responsive">
-            <GraphExplorer
-              graph={state.graph!}
-              isLoading={state.isLoading}
-              onNodeSelect={handleNodeSelect}
-              fileContents={state.fileContents}
-            />
-          </div>
-
-          {/* Right Panel - Chat */}
-          <div style={styles.rightPanel} className="right-panel-responsive">
-            {isApiKeyValid ? (
-              <ChatInterface
-                graph={state.graph!}
-                fileContents={state.fileContents}
-                style={{ height: "100%" }}
-              />
-            ) : (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  height: "100%",
-                  flexDirection: "column",
-                  gap: "16px",
-                  padding: "24px",
-                  textAlign: "center",
-                  color: colors.textMuted,
-                }}
-              >
-                <div style={{ fontSize: "48px", opacity: 0.3 }}>🔑</div>
-                <div>Configure your API key to use the chat interface</div>
+        <div style={workspaceStyle} data-layout="workspace-grid">
+          <div style={graphPanelStyle} data-panel="graph">
+            <div style={styles.panelHeader}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <span>🌌</span>
+                <div>
+                  <div style={{ fontWeight: 600, color: colors.text }}>
+                    Knowledge graph
+                  </div>
+                  <div style={{ fontSize: "12px", color: colors.textMuted }}>
+                    {state.graph?.nodes.length || 0} nodes mapped
+                  </div>
+                </div>
+              </div>
+              <div style={styles.panelHeaderRight}>
+                {activeCommitLabel && (
+                  <div
+                    style={{
+                      ...styles.infoChip,
+                      borderColor: colors.primary,
+                      color: colors.primaryLight,
+                    }}
+                  >
+                    <span>Commit</span>
+                    <span>{activeCommitLabel}</span>
+                  </div>
+                )}
                 <button
-                  onClick={() => updateState({ showSettings: true })}
-                  style={styles.secondaryButton}
+                  style={{
+                    ...styles.smallIconButton,
+                    backgroundColor: isGraphFullScreen
+                      ? colors.primary
+                      : "rgba(255,255,255,0.02)",
+                    color: isGraphFullScreen ? "#0b1120" : colors.text,
+                    borderColor: isGraphFullScreen
+                      ? colors.primaryLight
+                      : colors.border,
+                  }}
+                  onClick={() => setIsGraphFullScreen((prev) => !prev)}
                 >
-                  Open Settings
+                  {isGraphFullScreen ? "Exit Fullscreen" : "Fullscreen"}
                 </button>
               </div>
-            )}
+            </div>
+            <div style={{ flex: 1, minHeight: 0 }}>
+              <GraphExplorer
+                graph={state.graph!}
+                isLoading={state.isLoading}
+                onNodeSelect={handleNodeSelect}
+                fileContents={state.fileContents}
+              />
+            </div>
           </div>
+
+          {!isGraphFullScreen && (
+            <div style={styles.chatPanel} data-panel="chat">
+              <div style={styles.panelHeader}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <span>🤖</span>
+                  <div>
+                    <div style={{ fontWeight: 600, color: colors.text }}>
+                      Conversational copilot
+                    </div>
+                    <div style={{ fontSize: "12px", color: colors.textMuted }}>
+                      LLM-assisted exploration with repository context
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div
+                style={{
+                  flex: 1,
+                  minHeight: 0,
+                  display: "flex",
+                  flexDirection: "column",
+                }}
+              >
+                {isApiKeyValid ? (
+                  <ChatInterface
+                    graph={state.graph!}
+                    fileContents={state.fileContents}
+                    style={{ height: "100%" }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "16px",
+                      padding: "24px",
+                      textAlign: "center",
+                      color: colors.textMuted,
+                      height: "100%",
+                    }}
+                  >
+                    <div style={{ fontSize: "48px", opacity: 0.3 }}>🔑</div>
+                    <div>Configure your API key to use the chat interface</div>
+                    <button
+                      onClick={() => updateState({ showSettings: true })}
+                      style={styles.secondaryButton}
+                    >
+                      Open Settings
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
-      </>
+      </div>
     );
   };
 
@@ -1600,11 +2078,20 @@ const HomePage: React.FC = () => {
     // Extract stage from common patterns
     if (message.includes("Downloading")) {
       stage = "Downloading";
-    } else if (message.includes("Extracting") || message.includes("Reading ZIP")) {
+    } else if (
+      message.includes("Extracting") ||
+      message.includes("Reading ZIP")
+    ) {
       stage = "Extracting";
-    } else if (message.includes("Processing") || message.includes("Discovering")) {
+    } else if (
+      message.includes("Processing") ||
+      message.includes("Discovering")
+    ) {
       stage = "Processing";
-    } else if (message.includes("Generating") || message.includes("Analyzing")) {
+    } else if (
+      message.includes("Generating") ||
+      message.includes("Analyzing")
+    ) {
       stage = "Analyzing";
     } else if (message.includes("Saving") || message.includes("Storing")) {
       stage = "Saving";
@@ -1637,13 +2124,25 @@ const HomePage: React.FC = () => {
       {/* Global Loading Indicator */}
       <LoadingIndicator
         isVisible={state.isProcessing || !!loadingCommitSha}
-        message={state.progress || (loadingCommitSha ? "Processing commit..." : "Loading...")}
-        stage={progressInfo?.stage || loadingStage || (loadingCommitSha ? "Analyzing Commit" : undefined)}
+        message={
+          state.progress ||
+          (loadingCommitSha ? "Processing commit..." : "Loading...")
+        }
+        stage={
+          progressInfo?.stage ||
+          loadingStage ||
+          (loadingCommitSha ? "Analyzing Commit" : undefined)
+        }
         progress={progressInfo?.progress || loadingProgress}
-        subMessage={progressInfo?.subMessage || (loadingCommitSha ? `Commit: ${loadingCommitSha.substring(0, 7)}` : undefined)}
+        subMessage={
+          progressInfo?.subMessage ||
+          (loadingCommitSha
+            ? `Commit: ${loadingCommitSha.substring(0, 7)}`
+            : undefined)
+        }
         size="large"
       />
-      
+
       <div style={styles.container}>
         <style>{`
           @keyframes spin {
@@ -1651,23 +2150,127 @@ const HomePage: React.FC = () => {
             100% { transform: rotate(360deg); }
           }
           
-          #root {
-            height: 100vh;
-            width: 100vw;
+          @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+
+          *, *::before, *::after {
+            box-sizing: border-box;
           }
           
-          input:focus, textarea:focus {
-            border-color: ${colors.primary} !important;
-            box-shadow: 0 0 0 3px ${colors.primary}20 !important;
+          html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            min-height: 100%;
+            background: ${colors.background};
+            color: ${colors.text};
+            font-family: 'Space Grotesk', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+          }
+
+          body {
+            display: flex;
+            flex-direction: column;
+          }
+          
+          #root {
+            min-height: 100vh;
+            width: 100%;
+          }
+
+          button {
+            font-family: inherit;
+            transition: transform 0.2s ease;
           }
           
           button:hover:not(:disabled) {
             transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            box-shadow: 0 12px 30px rgba(2,6,23,0.45);
           }
           
           button:active:not(:disabled) {
             transform: translateY(0);
+          }
+
+          button:disabled {
+            cursor: not-allowed;
+          }
+
+          input:focus, textarea:focus, select:focus {
+            border-color: ${colors.primary} !important;
+            box-shadow: 0 0 0 3px ${colors.primary}30 !important;
+          }
+
+          [data-layout="top-bar"] {
+            align-items: center;
+          }
+
+          [data-layout="workspace-grid"] {
+            height: 100%;
+            min-height: 0;
+          }
+
+          [data-layout="workspace-grid"] > div {
+            min-height: 0;
+            height: 100%;
+          }
+
+          @media (max-width: 1280px) {
+            [data-layout="top-bar"] {
+              flex-direction: column;
+              align-items: flex-start;
+              gap: 16px;
+            }
+            [data-layout="top-bar"] > div {
+              width: 100%;
+            }
+            [data-layout="top-bar"] > div:nth-child(2) {
+              justify-content: flex-start;
+            }
+            [data-layout="top-bar"] > div:last-child {
+              flex-wrap: wrap;
+              justify-content: flex-start;
+            }
+          }
+
+          @media (max-width: 1024px) {
+            [data-layout="hero-grid"] {
+              grid-template-columns: 1fr;
+            }
+            [data-hero="actions"] {
+              order: -1;
+            }
+          }
+
+          @media (max-width: 900px) {
+            [data-layout="workspace-grid"] {
+              grid-template-columns: 1fr;
+              height: auto;
+            }
+            [data-panel="graph"],
+            [data-panel="chat"] {
+              min-height: 420px;
+              height: auto;
+            }
+          }
+
+          @media (max-width: 640px) {
+            [data-layout="workspace-grid"] {
+              height: auto;
+            }
+            [data-layout="top-bar"] > div:last-child {
+              flex-direction: column;
+              width: 100%;
+            }
+            [data-layout="top-bar"] > div:last-child button {
+              width: 100%;
+              justify-content: center;
+            }
+            [data-layout="workspace-grid"] > div {
+              min-height: 360px;
+              height: auto;
+            }
           }
         `}</style>
 
@@ -1705,49 +2308,59 @@ const HomePage: React.FC = () => {
             <div
               style={{
                 backgroundColor: colors.surface,
-                borderRadius: "16px",
-                padding: "32px",
-                maxWidth: "600px",
+                borderRadius: "8px",
+                padding: "28px",
+                maxWidth: "700px",
                 width: "90%",
                 maxHeight: "80vh",
                 overflow: "auto",
+                border: `1px solid ${colors.border}`,
+                boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
               }}
             >
               <h2
                 style={{
                   color: colors.text,
                   marginBottom: "24px",
-                  fontSize: "24px",
+                  fontSize: "20px",
                   fontWeight: "700",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
                 }}
               >
-                ⚙️ Settings
+                <span>⚙️</span>
+                Settings & Configuration
               </h2>
 
               {/* GitHub Token Section */}
               <div
                 style={{
-                  padding: "20px",
-                  borderRadius: "12px",
-                  backgroundColor: colors.surfaceWarm,
-                  border: `1px solid ${colors.borderLight}`,
-                  marginBottom: "24px",
+                  padding: "16px",
+                  borderRadius: "6px",
+                  backgroundColor: colors.backgroundAlt,
+                  border: `1px solid ${colors.border}`,
+                  marginBottom: "20px",
                 }}
               >
                 <h3
                   style={{
                     color: colors.text,
-                    marginBottom: "16px",
-                    fontSize: "18px",
+                    marginBottom: "14px",
+                    fontSize: "14px",
                     fontWeight: "600",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
                   }}
                 >
-                  🔑 GitHub Configuration
+                  <span>🔑</span>
+                  GitHub Configuration
                 </h3>
 
                 <div style={styles.inputGroup}>
                   <label style={styles.label}>
-                    GitHub Personal Access Token (Optional)
+                    GitHub Personal Access Token
                   </label>
                   <input
                     type="password"
@@ -1760,21 +2373,23 @@ const HomePage: React.FC = () => {
                   />
                   <div
                     style={{
-                      fontSize: "12px",
+                      fontSize: "11px",
                       color: colors.textMuted,
-                      marginTop: "4px",
+                      marginTop: "8px",
+                      lineHeight: "1.5",
                     }}
                   >
                     Increases rate limit from 60 to 5,000 requests/hour.
-                    Generate at:
+                    <br />
+                    Generate at{" "}
                     <a
                       href="https://github.com/settings/tokens"
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{
-                        color: colors.primary,
+                        color: colors.primaryLight,
                         textDecoration: "none",
-                        marginLeft: "4px",
+                        fontWeight: "500",
                       }}
                     >
                       github.com/settings/tokens
@@ -1786,21 +2401,25 @@ const HomePage: React.FC = () => {
               {/* LLM Configuration Section */}
               <div
                 style={{
-                  padding: "20px",
-                  borderRadius: "12px",
-                  backgroundColor: colors.surfaceWarm,
-                  border: `1px solid ${colors.borderLight}`,
+                  padding: "16px",
+                  borderRadius: "6px",
+                  backgroundColor: colors.backgroundAlt,
+                  border: `1px solid ${colors.border}`,
                 }}
               >
                 <h3
                   style={{
                     color: colors.text,
-                    marginBottom: "16px",
-                    fontSize: "18px",
+                    marginBottom: "14px",
+                    fontSize: "14px",
                     fontWeight: "600",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
                   }}
                 >
-                  🤖 LLM Configuration
+                  <span>🤖</span>
+                  LLM Configuration
                 </h3>
 
                 {/* Provider Selection */}
@@ -1811,7 +2430,7 @@ const HomePage: React.FC = () => {
                     onChange={(e) =>
                       updateSetting(
                         "llmProvider",
-                        e.target.value as LLMProvider
+                        e.target.value as LLMProvider,
                       )
                     }
                     style={{
@@ -1832,10 +2451,10 @@ const HomePage: React.FC = () => {
                     {settings.llmProvider === "azure-openai"
                       ? "Azure OpenAI API Key"
                       : settings.llmProvider === "anthropic"
-                      ? "Anthropic API Key"
-                      : settings.llmProvider === "gemini"
-                      ? "Google API Key"
-                      : "OpenAI API Key"}
+                        ? "Anthropic API Key"
+                        : settings.llmProvider === "gemini"
+                          ? "Google API Key"
+                          : "OpenAI API Key"}
                   </label>
                   <input
                     type="password"
@@ -1847,10 +2466,10 @@ const HomePage: React.FC = () => {
                       settings.llmProvider === "azure-openai"
                         ? "Your Azure OpenAI key..."
                         : settings.llmProvider === "anthropic"
-                        ? "sk-ant-..."
-                        : settings.llmProvider === "gemini"
-                        ? "Your Google API key..."
-                        : "sk-..."
+                          ? "sk-ant-..."
+                          : settings.llmProvider === "gemini"
+                            ? "Your Google API key..."
+                            : "sk-..."
                     }
                     style={styles.input}
                   />
@@ -1872,9 +2491,9 @@ const HomePage: React.FC = () => {
                       />
                       <div
                         style={{
-                          fontSize: "12px",
+                          fontSize: "11px",
                           color: colors.textMuted,
-                          marginTop: "4px",
+                          marginTop: "8px",
                         }}
                       >
                         Your Azure OpenAI resource endpoint
@@ -1889,7 +2508,7 @@ const HomePage: React.FC = () => {
                         onChange={(e) =>
                           updateSetting(
                             "azureOpenAIDeploymentName",
-                            e.target.value
+                            e.target.value,
                           )
                         }
                         placeholder="gpt-4o-mini"
@@ -1897,9 +2516,9 @@ const HomePage: React.FC = () => {
                       />
                       <div
                         style={{
-                          fontSize: "12px",
+                          fontSize: "11px",
                           color: colors.textMuted,
-                          marginTop: "4px",
+                          marginTop: "8px",
                         }}
                       >
                         The deployment name you created in Azure OpenAI Studio
@@ -1919,13 +2538,12 @@ const HomePage: React.FC = () => {
                       />
                       <div
                         style={{
-                          fontSize: "12px",
+                          fontSize: "11px",
                           color: colors.textMuted,
-                          marginTop: "4px",
+                          marginTop: "8px",
                         }}
                       >
-                        Azure OpenAI API version (e.g., 2024-02-01,
-                        2025-01-01-preview)
+                        Azure OpenAI API version
                       </div>
                     </div>
                   </>
@@ -1934,69 +2552,80 @@ const HomePage: React.FC = () => {
                 {/* Configuration Status */}
                 <div
                   style={{
-                    padding: "16px",
-                    borderRadius: "8px",
-                    backgroundColor: isApiKeyValid ? "#F0F9F0" : "#FFF5F5",
+                    padding: "12px 14px",
+                    borderRadius: "6px",
+                    backgroundColor: isApiKeyValid
+                      ? "#ECFDF5"
+                      : colors.errorLight,
                     border: `1px solid ${
-                      isApiKeyValid ? "#C6F6C6" : "#FED7D7"
+                      isApiKeyValid ? "#D1FAE5" : "#FECACA"
                     }`,
-                    marginTop: "16px",
+                    marginTop: "12px",
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: "10px",
                   }}
                 >
-                  <div
+                  <span
                     style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                      fontSize: "14px",
-                      fontWeight: "500",
-                      color: isApiKeyValid ? "#2F855A" : "#C53030",
+                      fontSize: "16px",
+                      marginTop: "0px",
+                      flexShrink: 0,
                     }}
                   >
-                    <span>{isApiKeyValid ? "✅" : "❌"}</span>
-                    {isApiKeyValid
-                      ? "Configuration Valid"
-                      : "Configuration Invalid"}
-                  </div>
-                  {!isApiKeyValid && (
+                    {isApiKeyValid ? "✅" : "❌"}
+                  </span>
+                  <div>
                     <div
                       style={{
-                        fontSize: "12px",
-                        color: "#C53030",
-                        marginTop: "4px",
+                        fontSize: "13px",
+                        fontWeight: "600",
+                        color: isApiKeyValid ? colors.secondary : colors.error,
+                        marginBottom: isApiKeyValid ? 0 : "4px",
                       }}
                     >
-                      {settings.llmProvider === "azure-openai"
-                        ? "Please provide API key, endpoint, and deployment name"
-                        : "Please provide a valid API key"}
+                      {isApiKeyValid
+                        ? "✅ Configuration Valid"
+                        : "❌ Configuration Invalid"}
                     </div>
-                  )}
+                    {!isApiKeyValid && (
+                      <div style={{ fontSize: "11px", color: colors.error }}>
+                        {settings.llmProvider === "azure-openai"
+                          ? "Please provide API key, endpoint, and deployment name"
+                          : "Please provide a valid API key"}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Provider Information */}
                 <div
                   style={{
-                    padding: "16px",
-                    borderRadius: "8px",
-                    backgroundColor: colors.background,
-                    border: `1px solid ${colors.borderLight}`,
-                    marginTop: "16px",
+                    padding: "12px 14px",
+                    borderRadius: "6px",
+                    backgroundColor: colors.backgroundAlt,
+                    border: `1px solid ${colors.border}`,
+                    marginTop: "12px",
                   }}
                 >
                   <div
                     style={{
-                      fontSize: "14px",
+                      fontSize: "12px",
                       fontWeight: "600",
                       color: colors.text,
-                      marginBottom: "8px",
+                      marginBottom: "6px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
                     }}
                   >
-                    📋 Provider Information
+                    <span>📋</span>
+                    Provider Information
                   </div>
                   <div
                     style={{
                       fontSize: "12px",
-                      color: colors.textMuted,
+                      color: colors.textSecondary,
                       lineHeight: "1.5",
                     }}
                   >
@@ -2012,7 +2641,20 @@ const HomePage: React.FC = () => {
                 </div>
               </div>
 
-              <div style={{ display: "flex", gap: "12px", marginTop: "24px" }}>
+              <div
+                style={{
+                  display: "flex",
+                  gap: "10px",
+                  marginTop: "24px",
+                  justifyContent: "flex-end",
+                }}
+              >
+                <button
+                  onClick={() => updateState({ showSettings: false })}
+                  style={styles.secondaryButton}
+                >
+                  Cancel
+                </button>
                 <button
                   onClick={() => {
                     // Save settings to localStorage
@@ -2027,12 +2669,6 @@ const HomePage: React.FC = () => {
                   style={styles.primaryButton}
                 >
                   💾 Save Settings
-                </button>
-                <button
-                  onClick={() => updateState({ showSettings: false })}
-                  style={styles.secondaryButton}
-                >
-                  Cancel
                 </button>
               </div>
             </div>
@@ -2075,7 +2711,7 @@ const HomePage: React.FC = () => {
                 maxWidth: "1200px",
                 maxHeight: "85vh",
                 overflow: "auto",
-                border: `1px solid ${colors.borderLight}`,
+                border: `1px solid ${colors.border}`,
               }}
             >
               <div
@@ -2156,17 +2792,23 @@ const HomePage: React.FC = () => {
                           const timeline = await fetchCommitHistory(
                             currentRepoInfo.owner,
                             currentRepoInfo.repo,
-                            { maxCommits: 100 }
+                            { maxCommits: 100 },
                           );
                           setLoadingStage("");
                           setLoadingProgress(undefined);
-                          
+
                           // Auto-load latest commit if available
                           if (timeline && timeline.commits.length > 0) {
                             const latestCommit = timeline.commits[0];
-                            const hasGraph = analyzedCommits.has(latestCommit.sha);
+                            const hasGraph = analyzedCommits.has(
+                              latestCommit.sha,
+                            );
                             if (hasGraph) {
-                              const graph = await loadGraph(currentRepoInfo.owner, currentRepoInfo.repo, latestCommit.sha);
+                              const graph = await loadGraph(
+                                currentRepoInfo.owner,
+                                currentRepoInfo.repo,
+                                latestCommit.sha,
+                              );
                               if (graph) {
                                 setCurrentCommitSha(latestCommit.sha);
                                 updateState({ graph, fileContents: new Map() });
@@ -2199,7 +2841,10 @@ const HomePage: React.FC = () => {
                   <h3 style={{ color: colors.text, marginBottom: "8px" }}>
                     Loading Commit History...
                   </h3>
-                  <p>Fetching commits from {currentRepoInfo.owner}/{currentRepoInfo.repo}</p>
+                  <p>
+                    Fetching commits from {currentRepoInfo.owner}/
+                    {currentRepoInfo.repo}
+                  </p>
                 </div>
               ) : commitTimeline ? (
                 <>
@@ -2214,7 +2859,8 @@ const HomePage: React.FC = () => {
                   <div
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))",
+                      gridTemplateColumns:
+                        "repeat(auto-fit, minmax(360px, 1fr))",
                       gap: "16px",
                     }}
                   >
@@ -2245,9 +2891,9 @@ const HomePage: React.FC = () => {
                     No Commit History Available
                   </h3>
                   <p>
-                    Unable to load commit history for{" "}
-                    {currentRepoInfo.owner}/{currentRepoInfo.repo}. Make sure
-                    you have access to this repository.
+                    Unable to load commit history for {currentRepoInfo.owner}/
+                    {currentRepoInfo.repo}. Make sure you have access to this
+                    repository.
                   </p>
                 </div>
               )}
@@ -2287,134 +2933,6 @@ Don't worry though - you can always re-upload your previous ZIP file if needed. 
           onImport={handleGitHubReposImport}
         />
 
-        {/* Responsive styles */}
-        <style>{`
-          /* Base styles for desktop */
-          * {
-            box-sizing: border-box;
-          }
-
-          html, body {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            overflow-x: hidden;
-          }
-
-          /* Welcome screen - allow scrolling if content exceeds viewport */
-          .welcome-overlay-desktop {
-            overflow-y: auto !important;
-            overflow-x: hidden !important;
-          }
-
-          /* Mobile styles */
-          @media (max-width: 768px) {
-            /* Welcome screen mobile adjustments */
-            .welcome-overlay-mobile {
-              padding: 20px 16px !important;
-            }
-
-            /* Main layout - stack panels vertically */
-            .main-layout-responsive {
-              flex-direction: column !important;
-            }
-
-            .left-panel-responsive {
-              flex: 0 0 60% !important;
-              min-height: 400px;
-            }
-
-            .right-panel-responsive {
-              flex: 0 0 40% !important;
-              min-height: 300px;
-            }
-
-            /* Navbar responsive */
-            .navbar-responsive {
-              padding: 8px 16px !important;
-              flex-wrap: wrap;
-            }
-
-            .navbar-content-responsive {
-              font-size: 12px !important;
-              gap: 8px !important;
-              flex-wrap: wrap;
-            }
-
-            .navbar-buttons-responsive {
-              position: static !important;
-              margin-top: 8px;
-              width: 100%;
-              justify-content: center;
-            }
-
-            .navbar-button-responsive {
-              padding: 6px 12px !important;
-              font-size: 12px !important;
-            }
-
-            /* Welcome title responsive */
-            .welcome-title-responsive {
-              font-size: 24px !important;
-              gap: 8px !important;
-            }
-
-            .welcome-subtitle-responsive {
-              font-size: 16px !important;
-              margin-bottom: 24px !important;
-            }
-
-            /* Buttons responsive */
-            .button-responsive {
-              padding: 12px 20px !important;
-              font-size: 14px !important;
-            }
-
-            /* Stats panel responsive */
-            .stats-grid-responsive {
-              grid-template-columns: 1fr !important;
-              gap: 16px !important;
-            }
-          }
-
-          /* Small mobile styles */
-          @media (max-width: 480px) {
-            .welcome-card-mobile {
-              padding: 20px !important;
-              border-radius: 12px !important;
-            }
-
-            .welcome-title-responsive {
-              font-size: 20px !important;
-            }
-
-            .welcome-subtitle-responsive {
-              font-size: 14px !important;
-              margin-bottom: 20px !important;
-            }
-
-            .button-responsive {
-              padding: 10px 16px !important;
-              font-size: 13px !important;
-            }
-
-            .navbar-content-responsive {
-              font-size: 11px !important;
-            }
-          }
-
-          /* Tablet styles */
-          @media (min-width: 769px) and (max-width: 1024px) {
-            .left-panel-responsive {
-              flex: 0 0 65% !important;
-            }
-
-            .right-panel-responsive {
-              flex: 0 0 35% !important;
-            }
-          }
-        `}</style>
       </div>
     </ErrorBoundary>
   );

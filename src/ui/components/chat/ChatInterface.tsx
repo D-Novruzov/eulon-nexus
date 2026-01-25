@@ -578,15 +578,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     return (
       <div style={{ 
         marginTop: '12px', 
-        borderTop: '1px solid rgba(0,0,0,0.1)', 
+        borderTop: `1px solid ${chatColors.border}`, 
         paddingTop: '12px' 
       }}>
         <button
           onClick={() => setIsExpanded(!isExpanded)}
           style={{
-            background: 'none',
+            background: 'transparent',
             border: 'none',
-            color: '#007bff',
+            color: chatColors.textSecondary,
             cursor: 'pointer',
             fontSize: '12px',
             display: 'flex',
@@ -602,21 +602,21 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         {isExpanded && (
           <div style={{ 
             marginTop: '8px',
-            padding: '12px',
-            backgroundColor: 'rgba(0,123,255,0.05)',
-            borderRadius: '6px',
-            border: '1px solid rgba(0,123,255,0.2)'
+            padding: '14px',
+            backgroundColor: 'rgba(30,41,59,0.8)',
+            borderRadius: '12px',
+            border: `1px solid ${chatColors.border}`
           }}>
-            <div style={{ fontSize: '11px', color: '#666', marginBottom: '8px', fontWeight: '500' }}>
+            <div style={{ fontSize: '11px', color: chatColors.textSecondary, marginBottom: '8px', fontWeight: '500' }}>
               🤔 Reasoning Process:
             </div>
-                         {reasoning.map((step, index: number) => (
+             {reasoning.map((step, index: number) => (
                <div key={index} style={{ 
                  marginBottom: index < reasoning.length - 1 ? '12px' : '0',
-                 padding: '8px',
-                 backgroundColor: 'rgba(255,255,255,0.7)',
-                 borderRadius: '4px',
-                 border: '1px solid rgba(0,0,0,0.1)'
+                 padding: '10px',
+                 backgroundColor: 'rgba(15,23,42,0.7)',
+                 borderRadius: '10px',
+                 border: `1px solid ${chatColors.borderSubtle}`
                }}>
                 <div style={{ 
                   display: 'flex', 
@@ -626,8 +626,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   fontSize: '11px'
                 }}>
                   <span style={{ 
-                    backgroundColor: '#007bff', 
-                    color: 'white', 
+                    backgroundColor: '#38bdf8', 
+                    color: '#0f172a', 
                     borderRadius: '50%', 
                     width: '16px', 
                     height: '16px', 
@@ -641,17 +641,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   </span>
                   <span style={{ 
                     backgroundColor: step.toolResult?.success 
-                      ? 'rgba(40,167,69,0.2)' 
+                      ? 'rgba(34,197,94,0.2)' 
                       : step.toolResult?.success === false
-                      ? 'rgba(220,53,69,0.2)'
-                      : 'rgba(108,117,125,0.2)',
+                      ? 'rgba(248,113,113,0.2)'
+                      : 'rgba(99,102,241,0.2)',
                     color: step.toolResult?.success 
-                      ? '#28a745' 
+                      ? '#4ade80' 
                       : step.toolResult?.success === false
-                      ? '#dc3545'
-                      : '#6c757d',
-                    padding: '2px 6px',
-                    borderRadius: '12px',
+                      ? '#fca5a5'
+                      : '#c4b5fd',
+                    padding: '3px 8px',
+                    borderRadius: '999px',
                     fontSize: '10px',
                     fontWeight: '500'
                   }}>
@@ -659,7 +659,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   </span>
                 </div>
                 
-                <div style={{ fontSize: '12px', lineHeight: '1.4' }}>
+                <div style={{ fontSize: '12px', lineHeight: '1.5', color: chatColors.text }}>
                   <div style={{ marginBottom: '4px' }}>
                     <strong>Thought:</strong> {step.thought}
                   </div>
@@ -668,9 +668,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     <div style={{ marginBottom: '4px' }}>
                       <strong>Input:</strong> 
                       <code style={{ 
-                        backgroundColor: 'rgba(0,0,0,0.1)', 
-                        padding: '1px 4px', 
-                        borderRadius: '2px',
+                        backgroundColor: 'rgba(15,23,42,0.8)', 
+                        padding: '2px 5px', 
+                        borderRadius: '6px',
                         fontSize: '11px',
                         marginLeft: '4px'
                       }}>
@@ -682,9 +682,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   {step.observation && (
                     <div style={{ 
                       marginTop: '6px',
-                      padding: '6px',
-                      backgroundColor: 'rgba(40,167,69,0.1)',
-                      borderRadius: '3px',
+                      padding: '8px',
+                      backgroundColor: chatColors.success,
+                      borderRadius: '8px',
                       fontSize: '11px'
                     }}>
                       <strong>Result:</strong> {step.observation}
@@ -694,11 +694,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   {step.toolResult && step.toolResult.error && (
                     <div style={{ 
                       marginTop: '6px',
-                      padding: '6px',
-                      backgroundColor: 'rgba(220,53,69,0.1)',
-                      borderRadius: '3px',
+                      padding: '8px',
+                      backgroundColor: chatColors.warning,
+                      borderRadius: '8px',
                       fontSize: '11px',
-                      color: '#dc3545'
+                      color: '#f87171'
                     }}>
                       <strong>Error:</strong> {step.toolResult.error}
                     </div>
@@ -731,23 +731,24 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           rehypePlugins={[rehypeHighlight]}
           components={{
             // Custom styling for different markdown elements
-            h1: ({ children }) => <h1 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '12px', color: '#333' }}>{children}</h1>,
-            h2: ({ children }) => <h2 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '10px', color: '#333' }}>{children}</h2>,
-            h3: ({ children }) => <h3 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '8px', color: '#333' }}>{children}</h3>,
-            p: ({ children }) => <p style={{ marginBottom: '12px', lineHeight: '1.5' }}>{children}</p>,
-            ul: ({ children }) => <ul style={{ marginBottom: '12px', paddingLeft: '20px' }}>{children}</ul>,
-            ol: ({ children }) => <ol style={{ marginBottom: '12px', paddingLeft: '20px' }}>{children}</ol>,
+            h1: ({ children }) => <h1 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '12px', color: chatColors.text }}>{children}</h1>,
+            h2: ({ children }) => <h2 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '10px', color: chatColors.text }}>{children}</h2>,
+            h3: ({ children }) => <h3 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '8px', color: chatColors.text }}>{children}</h3>,
+            p: ({ children }) => <p style={{ marginBottom: '12px', lineHeight: '1.5', color: chatColors.textSecondary }}>{children}</p>,
+            ul: ({ children }) => <ul style={{ marginBottom: '12px', paddingLeft: '20px', color: chatColors.textSecondary }}>{children}</ul>,
+            ol: ({ children }) => <ol style={{ marginBottom: '12px', paddingLeft: '20px', color: chatColors.textSecondary }}>{children}</ol>,
             li: ({ children }) => <li style={{ marginBottom: '4px', lineHeight: '1.4' }}>{children}</li>,
             code: ({ children, className, ...props }) => {
               const inline = !className?.includes('language-');
               return inline ? (
                 <code 
                   style={{ 
-                    backgroundColor: '#f1f3f4', 
+                    backgroundColor: 'rgba(15,23,42,0.8)', 
                     padding: '2px 4px', 
-                    borderRadius: '3px', 
+                    borderRadius: '6px', 
                     fontSize: '13px',
-                    fontFamily: 'Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
+                    fontFamily: 'Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+                    color: chatColors.text,
                   }}
                   {...props}
                 >
@@ -755,12 +756,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 </code>
               ) : (
                 <pre style={{ 
-                  backgroundColor: '#f8f9fa', 
-                  padding: '12px', 
-                  borderRadius: '6px', 
+                  backgroundColor: 'rgba(2,6,23,0.75)', 
+                  padding: '14px', 
+                  borderRadius: '12px', 
                   overflow: 'auto',
                   marginBottom: '12px',
-                  border: '1px solid #e9ecef'
+                  border: `1px solid ${chatColors.border}`
                 }}>
                   <code 
                     style={{ 
@@ -777,12 +778,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             },
             blockquote: ({ children }) => (
               <blockquote style={{ 
-                borderLeft: '4px solid #007bff', 
+                borderLeft: `4px solid ${chatColors.border}`, 
                 paddingLeft: '12px', 
                 marginLeft: '0',
                 marginBottom: '12px',
                 fontStyle: 'italic',
-                color: '#666'
+                color: chatColors.textSecondary
               }}>
                 {children}
               </blockquote>
@@ -792,16 +793,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 borderCollapse: 'collapse', 
                 width: '100%', 
                 marginBottom: '12px',
-                fontSize: '13px'
+                fontSize: '13px',
+                color: chatColors.text
               }}>
                 {children}
               </table>
             ),
             th: ({ children }) => (
               <th style={{ 
-                border: '1px solid #ddd', 
+                border: `1px solid ${chatColors.border}`, 
                 padding: '8px', 
-                backgroundColor: '#f8f9fa',
+                backgroundColor: 'rgba(15,23,42,0.6)',
                 fontWeight: 'bold',
                 textAlign: 'left'
               }}>
@@ -810,7 +812,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             ),
             td: ({ children }) => (
               <td style={{ 
-                border: '1px solid #ddd', 
+                border: `1px solid ${chatColors.border}`, 
                 padding: '8px'
               }}>
                 {children}
@@ -824,7 +826,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 target="_blank" 
                 rel="noopener noreferrer"
                 style={{ 
-                  color: '#007bff', 
+                  color: '#38bdf8', 
                   textDecoration: 'none'
                 }}
                 onMouseOver={(e) => e.currentTarget.style.textDecoration = 'underline'}
@@ -846,97 +848,228 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     return availableModels.length > 0 ? availableModels : llmService.getAvailableModels(settings.llmProvider);
   };
 
+  const chatColors = {
+    background: '#010314',
+    surface: 'rgba(7, 12, 28, 0.9)',
+    surfaceAlt: 'rgba(12, 18, 35, 0.75)',
+    panel: 'rgba(3, 8, 22, 0.9)',
+    border: 'rgba(99, 102, 241, 0.3)',
+    borderSubtle: 'rgba(99, 102, 241, 0.15)',
+    text: '#f8fafc',
+    textSecondary: '#a5b4fc',
+    muted: '#64748b',
+    userBubble: 'linear-gradient(135deg, #22d3ee 0%, #38bdf8 45%, #a855f7 100%)',
+    assistantBubble: 'rgba(10, 16, 34, 0.95)',
+    chip: 'rgba(59, 130, 246, 0.15)',
+    warning: 'rgba(250, 204, 21, 0.15)',
+    success: 'rgba(34, 197, 94, 0.15)',
+    glow: 'rgba(56,189,248,0.25)',
+  };
+
   const containerStyle: React.CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
-    height: '600px',
-    border: '1px solid #ddd',
-    borderRadius: '8px',
-    backgroundColor: '#fff',
+    height: '100%',
+    minHeight: '560px',
+    border: `1px solid ${chatColors.border}`,
+    borderRadius: '24px',
+    background: 'linear-gradient(160deg, rgba(1,4,19,0.95) 0%, rgba(8,18,40,0.9) 40%, rgba(23,14,54,0.85) 100%)',
+    boxShadow: '0 25px 60px rgba(2,6,23,0.6)',
+    overflow: 'hidden',
+    color: chatColors.text,
     ...style
   };
 
   const headerStyle: React.CSSProperties = {
-    padding: '16px',
-    borderBottom: '1px solid #eee',
-    backgroundColor: '#f8f9fa',
-    borderRadius: '8px 8px 0 0',
+    padding: '24px',
+    borderBottom: `1px solid ${chatColors.border}`,
     display: 'flex',
     justifyContent: 'space-between',
-    alignItems: 'center'
+    alignItems: 'flex-start',
+    background: chatColors.surface,
+    backdropFilter: 'blur(18px)',
+    gap: '12px',
+  };
+
+  const overviewCardStyle: React.CSSProperties = {
+    padding: '18px 24px 20px',
+    borderBottom: `1px solid ${chatColors.borderSubtle}`,
+    background: chatColors.panel,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '18px',
+    flexWrap: 'wrap',
+  };
+
+  const avatarStyle: React.CSSProperties = {
+    width: 60,
+    height: 60,
+    borderRadius: '20px',
+    background: 'linear-gradient(160deg, #38bdf8, #a855f7)',
+    boxShadow: '0 18px 35px rgba(56,189,248,0.35)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '28px',
+    color: '#0b1120',
+  };
+
+  const controlClusterStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    flexWrap: 'wrap',
   };
 
   const messagesStyle: React.CSSProperties = {
     flex: 1,
     overflowY: 'auto',
-    padding: '16px',
+    padding: '24px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '16px'
+    gap: '20px',
   };
 
   const inputAreaStyle: React.CSSProperties = {
-    padding: '16px',
-    borderTop: '1px solid #eee'
+    padding: '20px 24px',
+    borderTop: `1px solid ${chatColors.border}`,
+    background: 'rgba(15,23,42,0.8)',
+    backdropFilter: 'blur(18px)',
   };
 
   const messageStyle = (role: 'user' | 'assistant'): React.CSSProperties => ({
-    padding: '12px 16px',
-    borderRadius: '12px',
-    maxWidth: '80%',
+    padding: '16px 20px',
+    borderRadius: '18px',
+    maxWidth: '78%',
     alignSelf: role === 'user' ? 'flex-end' : 'flex-start',
-    backgroundColor: role === 'user' ? '#007bff' : '#f1f3f4',
-    color: role === 'user' ? '#fff' : '#333',
-    wordWrap: 'break-word'
+    background: role === 'user' ? chatColors.userBubble : chatColors.assistantBubble,
+    color: role === 'user' ? '#0b1120' : chatColors.text,
+    border: role === 'user' ? 'none' : `1px solid ${chatColors.border}`,
+    boxShadow: role === 'user'
+      ? '0 10px 30px rgba(34,211,238,0.25)'
+      : '0 15px 40px rgba(2,6,23,0.55)',
+    wordWrap: 'break-word',
   });
 
   const buttonStyle: React.CSSProperties = {
     padding: '8px 16px',
-    border: 'none',
-    borderRadius: '4px',
-    backgroundColor: '#007bff',
-    color: '#fff',
+    border: `1px solid ${chatColors.border}`,
+    borderRadius: '12px',
+    background: 'rgba(15,23,42,0.9)',
+    color: chatColors.text,
     cursor: 'pointer',
-    fontSize: '14px'
+    fontSize: '13px',
+    transition: 'all 0.2s ease',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  };
+
+  const controlButtonStyle: React.CSSProperties = {
+    ...buttonStyle,
+    minWidth: '150px',
+    padding: '12px 20px',
+    borderRadius: '999px',
+    fontWeight: 600,
+    fontSize: '13px',
+    background: 'rgba(15,23,42,0.92)',
+    borderColor: chatColors.borderSubtle,
+  };
+
+  const iconButtonStyle: React.CSSProperties = {
+    ...buttonStyle,
+    width: '44px',
+    height: '44px',
+    borderRadius: '16px',
+    padding: 0,
+    fontSize: '16px',
   };
 
   const textareaStyle: React.CSSProperties = {
     width: '100%',
     minHeight: '60px',
-    padding: '12px',
-    border: '1px solid #ddd',
-    borderRadius: '4px',
+    padding: '14px 16px',
+    border: `1px solid ${chatColors.border}`,
+    borderRadius: '16px',
     resize: 'vertical',
     fontSize: '14px',
-    fontFamily: 'inherit'
+    fontFamily: 'inherit',
+    background: 'rgba(2,6,23,0.6)',
+    color: chatColors.text,
+    outline: 'none',
   };
 
   return (
     <div className={`chat-interface ${className}`} style={containerStyle}>
       {/* Header */}
       <div style={headerStyle}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span style={{ fontSize: '18px', fontWeight: '600' }}>💬</span>
-          <span style={{ fontSize: '16px', fontWeight: '600' }}>Code Assistant</span>
-          <span style={{ 
-            fontSize: '12px', 
-            color: '#666',
-            backgroundColor: '#e9ecef',
-            padding: '2px 8px',
-            borderRadius: '12px'
-          }}>
-            {llmService.getProviderDisplayName(settings.llmProvider)}
-          </span>
+        <div>
+          <div style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.3em', color: chatColors.textSecondary }}>
+            Conversational copilot
+          </div>
+          <div style={{ marginTop: '6px', fontSize: '14px', color: chatColors.muted }}>
+            LLM-assisted exploration with repository context
+          </div>
         </div>
-        
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div
+          style={{
+            padding: '6px 14px',
+            borderRadius: '999px',
+            border: `1px solid ${chatColors.border}`,
+            color: chatColors.textSecondary,
+            fontSize: '11px',
+            letterSpacing: '0.2em',
+            textTransform: 'uppercase',
+            background: 'rgba(255,255,255,0.03)',
+          }}
+        >
+          Live graph
+        </div>
+      </div>
+
+      <div style={overviewCardStyle}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
+          <div style={avatarStyle}>💬</div>
+          <div>
+            <div style={{ fontSize: '20px', fontWeight: 600, letterSpacing: '0.08em', color: chatColors.text }}>
+              Nexus Copilot
+            </div>
+            <div
+              style={{
+                marginTop: '8px',
+                fontSize: '12px',
+                color: chatColors.textSecondary,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                flexWrap: 'wrap',
+              }}
+            >
+              <span
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: '999px',
+                  background: chatColors.chip,
+                  color: '#93c5fd',
+                  fontSize: '11px',
+                }}
+              >
+                {llmService.getProviderDisplayName(settings.llmProvider)}
+              </span>
+              <span style={{ color: chatColors.muted }}>Project: {projectName}</span>
+              <span style={{ color: chatColors.muted }}>Sessions: {sessions.length}</span>
+            </div>
+          </div>
+        </div>
+
+        <div style={controlClusterStyle}>
           <button
             onClick={() => setShowSessionManager(!showSessionManager)}
             style={{
-              ...buttonStyle,
-              backgroundColor: showSessionManager ? '#28a745' : '#6c757d',
-              fontSize: '12px',
-              padding: '6px 12px'
+              ...controlButtonStyle,
+              borderColor: showSessionManager ? 'rgba(16,185,129,0.45)' : chatColors.borderSubtle,
+              background: showSessionManager ? 'rgba(16,185,129,0.15)' : 'rgba(15,23,42,0.92)',
             }}
             title="Manage chat sessions"
           >
@@ -945,10 +1078,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           <button
             onClick={createNewSession}
             style={{
-              ...buttonStyle,
-              backgroundColor: '#17a2b8',
-              fontSize: '12px',
-              padding: '6px 12px'
+              ...controlButtonStyle,
+              background: 'linear-gradient(120deg, #38bdf8, #6366f1, #a855f7)',
+              border: 'none',
+              color: '#0f172a',
+              boxShadow: '0 15px 35px rgba(56,189,248,0.35)',
             }}
             title="Start new conversation"
           >
@@ -956,7 +1090,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           </button>
           <button
             onClick={() => setShowSettings(!showSettings)}
-            style={{ ...buttonStyle, fontSize: '12px', padding: '6px 12px' }}
+            style={iconButtonStyle}
             title="Settings"
           >
             ⚙️
@@ -964,10 +1098,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           <button
             onClick={clearConversation}
             style={{
-              ...buttonStyle,
-              backgroundColor: '#dc3545',
-              fontSize: '12px',
-              padding: '6px 12px'
+              ...iconButtonStyle,
+              borderColor: 'rgba(248,113,113,0.45)',
+              background: 'rgba(248,113,113,0.15)',
+              color: '#fecdd3',
             }}
             title="Clear conversation"
           >
@@ -978,20 +1112,41 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       {/* Settings Panel */}
       {showSettings && (
-        <div style={{
-          padding: '16px',
-          backgroundColor: '#f8f9fa',
-          borderBottom: '1px solid #eee'
-        }}>
-          <h4 style={{ margin: '0 0 12px 0', fontSize: '14px' }}>LLM Configuration</h4>
+        <div
+          style={{
+            padding: '20px 24px',
+            backgroundColor: 'rgba(8,13,28,0.92)',
+            borderBottom: `1px solid ${chatColors.border}`,
+            backdropFilter: 'blur(18px)',
+          }}
+        >
+          <h4
+            style={{
+              margin: '0 0 18px 0',
+              fontSize: '14px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.25em',
+              color: chatColors.textSecondary,
+            }}
+          >
+            LLM Configuration
+          </h4>
           
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
             <div>
-              <label style={{ fontSize: '12px', color: '#666' }}>Provider</label>
+              <label style={{ fontSize: '11px', color: chatColors.textSecondary, textTransform: 'uppercase', letterSpacing: '0.2em' }}>Provider</label>
               <select
                 value={settings.llmProvider}
                 onChange={(e) => updateSetting('llmProvider', e.target.value as LLMProvider)}
-                style={{ width: '100%', padding: '6px', fontSize: '14px' }}
+                style={{ 
+                  width: '100%', 
+                  padding: '10px 12px', 
+                  fontSize: '13px',
+                  borderRadius: '12px',
+                  border: `1px solid ${chatColors.border}`,
+                  background: 'rgba(2,6,23,0.65)',
+                  color: chatColors.text,
+                }}
               >
                 <option value="openai">OpenAI</option>
                 <option value="azure-openai">Azure OpenAI</option>
@@ -1002,7 +1157,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <label style={{ fontSize: '12px', color: '#666' }}>
+                <label style={{ fontSize: '11px', color: chatColors.textSecondary, textTransform: 'uppercase', letterSpacing: '0.2em' }}>
                   {settings.llmProvider === 'azure-openai' ? 'Deployment Name' : 'Model'}
                   {isLoadingModels && ' (Loading...)'}
                 </label>
@@ -1025,11 +1180,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     }}
                     disabled={isLoadingModels || !getCurrentProviderApiKey()}
                     style={{
-                      fontSize: '10px',
-                      padding: '2px 6px',
-                      backgroundColor: '#f8f9fa',
-                      border: '1px solid #ddd',
-                      borderRadius: '4px',
+                      fontSize: '11px',
+                      padding: '4px 8px',
+                      backgroundColor: 'rgba(15,23,42,0.7)',
+                      border: `1px solid ${chatColors.border}`,
+                      borderRadius: '10px',
                       cursor: isLoadingModels ? 'wait' : 'pointer',
                       opacity: isLoadingModels || !getCurrentProviderApiKey() ? 0.5 : 1
                     }}
@@ -1045,7 +1200,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   value={settings.azureOpenAIDeploymentName || ''}
                   onChange={(e) => updateSetting('azureOpenAIDeploymentName', e.target.value)}
                   placeholder="gpt-4.1-mini-v2"
-                  style={{ width: '100%', padding: '6px', fontSize: '14px' }}
+                  style={{ 
+                    width: '100%', 
+                    padding: '10px 12px', 
+                    fontSize: '13px',
+                    borderRadius: '12px',
+                    border: `1px solid ${chatColors.border}`,
+                    background: 'rgba(2,6,23,0.65)',
+                    color: chatColors.text,
+                  }}
                 />
               ) : (
                 <select
@@ -1053,10 +1216,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   onChange={(e) => setSelectedModel(e.target.value)}
                   style={{ 
                     width: '100%', 
-                    padding: '6px', 
-                    fontSize: '14px',
+                    padding: '10px 12px', 
+                    fontSize: '13px',
                     opacity: isLoadingModels ? 0.6 : 1,
-                    cursor: isLoadingModels ? 'wait' : 'pointer'
+                    cursor: isLoadingModels ? 'wait' : 'pointer',
+                    borderRadius: '12px',
+                    border: `1px solid ${chatColors.border}`,
+                    background: 'rgba(2,6,23,0.65)',
+                    color: chatColors.text,
                   }}
                   disabled={isLoadingModels}
                 >
@@ -1075,8 +1242,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             </div>
           </div>
 
-          <div style={{ marginBottom: '12px' }}>
-            <label style={{ fontSize: '12px', color: '#666' }}>API Key</label>
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ fontSize: '11px', color: chatColors.textSecondary, textTransform: 'uppercase', letterSpacing: '0.2em' }}>API Key</label>
             <input
               type="password"
               value={getCurrentProviderApiKey()}
@@ -1086,7 +1253,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 settings.llmProvider === 'anthropic' ? 'sk-ant-...' :
                 settings.llmProvider === 'gemini' ? 'Your Google API key...' : 'sk-...'
               }
-              style={{ width: '100%', padding: '6px', fontSize: '14px' }}
+              style={{ 
+                width: '100%', 
+                padding: '10px 12px', 
+                fontSize: '13px',
+                borderRadius: '12px',
+                border: `1px solid ${chatColors.border}`,
+                background: 'rgba(2,6,23,0.65)',
+                color: chatColors.text,
+              }}
             />
           </div>
 
@@ -1094,49 +1269,59 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           {settings.llmProvider === 'azure-openai' && (
             <>
               <div style={{ marginBottom: '12px' }}>
-                <label style={{ fontSize: '12px', color: '#666' }}>Azure OpenAI Endpoint</label>
+                <label style={{ fontSize: '11px', color: chatColors.textSecondary, textTransform: 'uppercase', letterSpacing: '0.2em' }}>Azure OpenAI Endpoint</label>
                 <input
                   type="text"
                   value={settings.azureOpenAIEndpoint || ''}
                   onChange={(e) => updateSetting('azureOpenAIEndpoint', e.target.value)}
                   placeholder="https://your-resource.openai.azure.com"
-                  style={{ width: '100%', padding: '6px', fontSize: '14px' }}
+                  style={{ 
+                    width: '100%', 
+                    padding: '10px 12px', 
+                    fontSize: '13px',
+                    borderRadius: '12px',
+                    border: `1px solid ${chatColors.border}`,
+                    background: 'rgba(2,6,23,0.65)',
+                    color: chatColors.text,
+                  }}
                 />
               </div>
 
               <div style={{ marginBottom: '12px' }}>
-                <label style={{ fontSize: '12px', color: '#666' }}>API Version</label>
+                <label style={{ fontSize: '11px', color: chatColors.textSecondary, textTransform: 'uppercase', letterSpacing: '0.2em' }}>API Version</label>
                 <input
                   type="text"
                   value={settings.azureOpenAIApiVersion || '2024-02-01'}
                   onChange={(e) => updateSetting('azureOpenAIApiVersion', e.target.value)}
                   placeholder="2024-02-01"
-                  style={{ width: '100%', padding: '6px', fontSize: '14px' }}
+                  style={{ 
+                    width: '100%', 
+                    padding: '10px 12px', 
+                    fontSize: '13px',
+                    borderRadius: '12px',
+                    border: `1px solid ${chatColors.border}`,
+                    background: 'rgba(2,6,23,0.65)',
+                    color: chatColors.text,
+                  }}
                 />
               </div>
             </>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', color: chatColors.textSecondary, fontSize: '12px' }}>
             <div>
-              <label style={{ fontSize: '12px', color: '#666' }}>
-                Temperature: 0.1 (fixed)
-              </label>
-                <div style={{ fontSize: '12px', color: '#888', marginTop: '4px' }}>
-                Using optimized temperature for code analysis
-              </div>
+              <div style={{ fontWeight: 600, marginBottom: '4px' }}>Temperature: 0.1 (fixed)</div>
+              <div>Optimized for deterministic repository answers</div>
             </div>
             
             <div>
-              <label style={{ fontSize: '12px', color: '#666' }}>Token Limits: Auto (OpenAI managed)</label>
-              <div style={{ fontSize: '12px', color: '#888', marginTop: '4px' }}>
-                OpenAI automatically manages token limits based on model capabilities
-              </div>
+              <div style={{ fontWeight: 600, marginBottom: '4px' }}>Token Limits</div>
+              <div>Managed automatically per provider</div>
             </div>
           </div>
 
           {/* Save Button */}
-          <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+          <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
             <button
               onClick={() => {
                 // Settings are automatically saved by useSettings hook
@@ -1145,9 +1330,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               }}
               style={{
                 ...buttonStyle,
-                backgroundColor: '#28a745',
+                background: 'linear-gradient(120deg, #22d3ee, #a855f7)',
+                border: 'none',
                 fontSize: '12px',
-                padding: '8px 16px'
+                padding: '8px 20px',
+                color: '#0f172a',
               }}
             >
               💾 Save Settings
@@ -1156,9 +1343,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               onClick={() => setShowSettings(false)}
               style={{
                 ...buttonStyle,
-                backgroundColor: '#6c757d',
                 fontSize: '12px',
-                padding: '8px 16px'
+                padding: '8px 20px'
               }}
             >
               Cancel
@@ -1170,28 +1356,30 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       {/* Session Manager Panel */}
       {showSessionManager && (
         <div style={{
-          padding: '16px',
-          backgroundColor: '#f8f9fa',
-          borderBottom: '1px solid #eee',
-          maxHeight: '300px',
-          overflowY: 'auto'
+          padding: '18px 24px',
+          backgroundColor: 'rgba(12,18,35,0.9)',
+          borderBottom: `1px solid ${chatColors.border}`,
+          maxHeight: '320px',
+          overflowY: 'auto',
+          backdropFilter: 'blur(14px)',
         }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-            <h4 style={{ margin: '0', fontSize: '14px' }}>Chat Sessions</h4>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+            <h4 style={{ margin: '0', fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.2em', color: chatColors.textSecondary }}>Chat Sessions</h4>
             <button
               onClick={createNewSession}
               style={{
                 ...buttonStyle,
-                backgroundColor: '#28a745',
+                background: 'rgba(34,197,94,0.2)',
+                borderColor: 'rgba(34,197,94,0.4)',
                 fontSize: '12px',
-                padding: '4px 8px'
+                padding: '4px 10px'
               }}
             >
               ➕ New Session
             </button>
           </div>
           
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {sessions.map((session) => (
               <div
                 key={session.id}
@@ -1199,10 +1387,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
-                  padding: '8px',
-                  backgroundColor: session.isActive ? '#e3f2fd' : '#fff',
-                  border: session.isActive ? '2px solid #2196f3' : '1px solid #ddd',
-                  borderRadius: '4px',
+                  padding: '10px 12px',
+                  backgroundColor: session.isActive ? 'rgba(59,130,246,0.15)' : 'rgba(15,23,42,0.6)',
+                  border: session.isActive ? '1px solid rgba(59,130,246,0.5)' : `1px solid ${chatColors.borderSubtle}`,
+                  borderRadius: '14px',
                   cursor: 'pointer'
                 }}
                 onClick={() => switchSession(session.id)}
@@ -1210,18 +1398,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 <div style={{ flex: 1 }}>
                   <div style={{ 
                     fontSize: '13px', 
-                    fontWeight: session.isActive ? '600' : '400',
-                    marginBottom: '2px'
+                    fontWeight: session.isActive ? 600 : 400,
+                    marginBottom: '4px',
+                    color: chatColors.text,
                   }}>
                     {session.name}
                   </div>
-                  <div style={{ fontSize: '11px', color: '#666' }}>
+                  <div style={{ fontSize: '11px', color: chatColors.textSecondary }}>
                     {session.messageCount} messages • {new Date(session.lastAccessed).toLocaleDateString()}
                     {session.projectName && ` • ${session.projectName}`}
                   </div>
                 </div>
                 
-                <div style={{ display: 'flex', gap: '4px' }}>
+                <div style={{ display: 'flex', gap: '6px' }}>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -1232,10 +1421,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     }}
                     style={{
                       ...buttonStyle,
-                      backgroundColor: '#ffc107',
-                      color: '#000',
-                      fontSize: '10px',
-                      padding: '2px 6px'
+                      background: 'rgba(251,191,36,0.2)',
+                      color: '#facc15',
+                      borderColor: 'rgba(251,191,36,0.35)',
+                      fontSize: '11px',
+                      padding: '4px 8px'
                     }}
                     title="Rename session"
                   >
@@ -1248,9 +1438,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     }}
                     style={{
                       ...buttonStyle,
-                      backgroundColor: '#dc3545',
-                      fontSize: '10px',
-                      padding: '2px 6px'
+                      background: 'rgba(248,113,113,0.2)',
+                      borderColor: 'rgba(248,113,113,0.4)',
+                      fontSize: '11px',
+                      padding: '4px 8px'
                     }}
                     title="Delete session"
                   >
@@ -1262,10 +1453,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             
             {sessions.length === 0 && (
               <div style={{ 
-                textAlign: 'center', 
-                color: '#666', 
-                fontSize: '12px', 
-                padding: '20px' 
+                textAlign: 'center',
+                color: chatColors.textSecondary,
+                fontSize: '12px',
+                padding: '24px'
               }}>
                 No chat sessions yet. Start a new conversation!
               </div>
@@ -1273,12 +1464,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           </div>
           
           <div style={{ 
-            marginTop: '12px', 
-            padding: '8px', 
-            backgroundColor: '#e9ecef', 
-            borderRadius: '4px',
+            marginTop: '14px', 
+            padding: '10px 12px', 
+            backgroundColor: 'rgba(30,64,175,0.2)', 
+            borderRadius: '10px',
             fontSize: '11px',
-            color: '#666'
+            color: chatColors.textSecondary,
+            border: `1px solid ${chatColors.border}`,
           }}>
             💡 Sessions are automatically saved to your browser's local storage. 
             Each session maintains its own conversation history and can cache query results for faster responses.
@@ -1291,31 +1483,31 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         {messages.length === 0 && (
           <div style={{
             textAlign: 'center',
-            color: '#666',
+            color: chatColors.textSecondary,
             fontSize: '14px',
-            padding: '40px 20px'
+            padding: '48px 24px'
           }}>
-            <div style={{ fontSize: '48px', marginBottom: '16px', opacity: 0.3 }}>💬</div>
+            <div style={{ fontSize: '48px', marginBottom: '16px', opacity: 0.4 }}>💬</div>
             <div>Ask me anything about the codebase!</div>
-            <div style={{ fontSize: '12px', marginTop: '8px', color: '#999' }}>
-              I can help you understand functions, classes, dependencies, and more.
+            <div style={{ fontSize: '12px', marginTop: '8px', color: chatColors.muted }}>
+              I can help you understand ownership, dependencies, and history.
             </div>
-                         {(!graph || !graph.nodes || graph.nodes.length === 0) && (
-               <div style={{ 
-                 marginTop: '20px', 
-                 padding: '12px', 
-                 backgroundColor: '#fff3cd', 
-                 border: '1px solid #ffeaa7',
-                 borderRadius: '4px',
-                 color: '#856404'
-               }}>
-                 <strong>⚠️ No codebase loaded</strong><br />
-                 Please load a repository first to start analyzing code.<br />
-                 <small style={{ fontSize: '11px', opacity: 0.8 }}>
-                   The knowledge graph is being built in the background. Once complete, you'll be able to ask questions.
-                 </small>
-               </div>
-             )}
+            {(!graph || !graph.nodes || graph.nodes.length === 0) && (
+              <div style={{ 
+                marginTop: '20px', 
+                padding: '14px', 
+                backgroundColor: chatColors.warning, 
+                border: `1px solid rgba(250,204,21,0.35)`,
+                borderRadius: '12px',
+                color: '#fde047'
+              }}>
+                <strong>⚠️ No codebase loaded</strong><br />
+                Please load a repository first to start analyzing code.<br />
+                <small style={{ fontSize: '11px', opacity: 0.8 }}>
+                  The knowledge graph is being built in the background. Once complete, you'll be able to ask questions.
+                </small>
+              </div>
+            )}
           </div>
         )}
 
@@ -1333,7 +1525,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               
               {/* Simple Metadata */}
               {message.metadata && (
-                <div style={{ fontSize: '12px', opacity: 0.8, marginTop: '8px' }}>
+                <div style={{ fontSize: '12px', opacity: 0.85, marginTop: '8px', color: chatColors.textSecondary }}>
                   {message.metadata.confidence && (
                     <div style={{ marginBottom: '4px' }}>
                       Confidence: {Math.round(message.metadata.confidence * 100)}%
@@ -1355,8 +1547,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                         <div key={index} style={{ 
                           marginTop: '4px', 
                           padding: '8px', 
-                          backgroundColor: 'rgba(0,0,0,0.1)', 
-                          borderRadius: '4px',
+                          backgroundColor: 'rgba(2,6,23,0.6)', 
+                          borderRadius: '8px',
+                          border: `1px solid ${chatColors.border}`,
                           fontFamily: 'monospace',
                           fontSize: '11px'
                         }}>
@@ -1372,7 +1565,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             
             <div style={{
               fontSize: '11px',
-              color: '#999',
+              color: chatColors.muted,
               textAlign: message.role === 'user' ? 'right' : 'left',
               marginTop: '4px'
             }}>
@@ -1387,8 +1580,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               <div style={{ 
                 width: '16px', 
                 height: '16px', 
-                border: '2px solid #ccc',
-                borderTop: '2px solid #007bff',
+                border: `2px solid ${chatColors.border}`,
+                borderTop: '2px solid #38bdf8',
                 borderRadius: '50%',
                 animation: 'spin 1s linear infinite'
               }} />
@@ -1418,6 +1611,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             style={{
               ...buttonStyle,
               minWidth: '80px',
+              background: 'linear-gradient(120deg, #22d3ee, #a855f7)',
+              border: 'none',
+              color: '#0f172a',
               opacity: (isLoading || !inputValue.trim()) ? 0.5 : 1
             }}
           >
@@ -1433,116 +1629,69 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           100% { transform: rotate(360deg); }
         }
 
-        /* Syntax highlighting styles */
         .hljs {
-          background: #f8f9fa !important;
-          color: #333 !important;
+          background: rgba(2,6,23,0.8) !important;
+          color: #f8fafc !important;
         }
-        
         .hljs-keyword,
         .hljs-selector-tag,
         .hljs-title,
         .hljs-section,
-        .hljs-doctag,
-        .hljs-name,
         .hljs-strong {
-          color: #d73a49;
+          color: #c084fc;
         }
-        
         .hljs-string,
-        .hljs-title,
-        .hljs-section,
         .hljs-built_in,
         .hljs-literal,
-        .hljs-type,
-        .hljs-addition,
         .hljs-tag,
         .hljs-quote,
-        .hljs-name,
-        .hljs-selector-id,
-        .hljs-selector-class {
-          color: #032f62;
+        .hljs-name {
+          color: #7dd3fc;
         }
-        
         .hljs-comment,
         .hljs-quote,
         .hljs-variable,
-        .hljs-template-variable,
-        .hljs-attribute,
-        .hljs-tag,
-        .hljs-name,
-        .hljs-regexp,
-        .hljs-link,
-        .hljs-name,
-        .hljs-selector-id,
-        .hljs-selector-class {
-          color: #6f42c1;
+        .hljs-attribute {
+          color: #94a3b8;
         }
-        
         .hljs-number,
         .hljs-meta,
-        .hljs-built_in,
-        .hljs-builtin-name,
-        .hljs-literal,
-        .hljs-type,
-        .hljs-params {
-          color: #005cc5;
+        .hljs-symbol {
+          color: #f472b6;
         }
-        
         .hljs-attr,
-        .hljs-variable,
-        .hljs-template-variable,
-        .hljs-type,
-        .hljs-built_in,
-        .hljs-builtin-name,
-        .hljs-symbol,
         .hljs-bullet,
-        .hljs-link,
-        .hljs-meta,
-        .hljs-selector-attr,
-        .hljs-selector-pseudo {
-          color: #e36209;
+        .hljs-link {
+          color: #facc15;
         }
 
-        /* Custom markdown styles */
         .chat-interface .markdown-content {
           line-height: 1.6;
         }
-        
         .chat-interface .markdown-content > *:first-child {
           margin-top: 0;
         }
-        
         .chat-interface .markdown-content > *:last-child {
           margin-bottom: 0;
         }
-        
-        /* Better spacing for lists */
         .chat-interface .markdown-content ul,
         .chat-interface .markdown-content ol {
           margin: 8px 0 12px 0;
         }
-        
         .chat-interface .markdown-content li {
           margin-bottom: 2px;
         }
-        
-        /* Code block improvements */
         .chat-interface .markdown-content pre {
           max-width: 100%;
           overflow-x: auto;
           white-space: pre-wrap;
-          word-wrap: break-word;
         }
-        
-        /* Table improvements */
         .chat-interface .markdown-content table {
           max-width: 100%;
           overflow-x: auto;
           display: block;
           white-space: nowrap;
         }
-        
         .chat-interface .markdown-content thead,
         .chat-interface .markdown-content tbody,
         .chat-interface .markdown-content tr {
