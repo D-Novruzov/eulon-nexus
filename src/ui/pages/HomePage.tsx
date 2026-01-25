@@ -6,6 +6,7 @@ import { ChatInterface } from "../components/chat/index.ts";
 import WarningDialog from "../components/WarningDialog.tsx";
 import ExportFormatModal from "../components/ExportFormatModal.tsx";
 import RepositoryInput from "../components/repository/RepositoryInput.tsx";
+import LoadingIndicator from "../components/LoadingIndicator.tsx";
 import type { KnowledgeGraph } from "../../core/graph/types.ts";
 import { IngestionService } from "../../services/ingestion.service.ts";
 import { LLMService, type LLMProvider } from "../../ai/llm-service.ts";
@@ -23,6 +24,7 @@ import {
 } from "../components/index.ts";
 import { useCommitHistory } from "../hooks/useCommitHistory.ts";
 import { useGraphPersistence } from "../hooks/useGraphPersistence.ts";
+import { useLocalGraphPersistence } from "../hooks/useLocalGraphPersistence.ts";
 
 interface AppState {
   // Data
@@ -83,13 +85,30 @@ const HomePage: React.FC = () => {
   // Create LLM service once (doesn't need token updates)
   const [llmService] = useState(() => new LLMService());
 
+  // Helper to get current GitHub access token from session or localStorage
+  const getGitHubAccessToken = useCallback(() => {
+    // Try to get from session storage (set after OAuth - this is the actual access token)
+    const accessToken = sessionStorage.getItem("github_access_token");
+    if (accessToken) {
+      return accessToken;
+    }
+    // Fall back to localStorage (legacy)
+    const legacyToken = localStorage.getItem("github_session_token");
+    if (legacyToken) {
+      return legacyToken;
+    }
+    // Fall back to state
+    return state.githubToken || undefined;
+  }, [state.githubToken]);
+
   // Commit history hook (uses current GitHub token if available)
+  const githubToken = getGitHubAccessToken();
   const {
     timeline: commitTimeline,
     isLoading: historyLoading,
     error: historyError,
     fetchCommitHistory,
-  } = useCommitHistory();
+  } = useCommitHistory(githubToken);
 
   // Graph persistence hook for storing graphs on the server
   const {
@@ -113,22 +132,11 @@ const HomePage: React.FC = () => {
     owner: string;
     repo: string;
   } | null>(null);
-
-  // Helper to get current GitHub access token from session or localStorage
-  const getGitHubAccessToken = useCallback(() => {
-    // Try to get from session storage (set after OAuth - this is the actual access token)
-    const accessToken = sessionStorage.getItem("github_access_token");
-    if (accessToken) {
-      return accessToken;
-    }
-    // Fall back to localStorage (legacy)
-    const legacyToken = localStorage.getItem("github_session_token");
-    if (legacyToken) {
-      return legacyToken;
-    }
-    // Fall back to state
-    return state.githubToken || undefined;
-  }, [state.githubToken]);
+  const [currentCommitSha, setCurrentCommitSha] = useState<string | null>(null); // Track which commit's graph is currently displayed
+  
+  // Enhanced progress tracking
+  const [loadingStage, setLoadingStage] = useState<string>("");
+  const [loadingProgress, setLoadingProgress] = useState<number | undefined>(undefined);
 
   // Use settings hook for LLM configuration
   const {
@@ -137,6 +145,49 @@ const HomePage: React.FC = () => {
     getCurrentProviderApiKey,
     updateCurrentProviderApiKey,
   } = useSettings();
+
+  // Local graph persistence hook (IndexedDB) for instant reload
+  const {
+    restoreLastSession,
+    isLoading: localPersistenceLoading,
+  } = useLocalGraphPersistence();
+
+  // Auto-restore last session on mount
+  const [autoRestoreAttempted, setAutoRestoreAttempted] = useState(false);
+
+  useEffect(() => {
+    if (autoRestoreAttempted || localPersistenceLoading) return;
+
+    const attemptAutoRestore = async () => {
+      setAutoRestoreAttempted(true);
+
+      try {
+        const restored = await restoreLastSession();
+
+        if (restored) {
+          console.log(`✅ Auto-restored graph: ${restored.repoId}`);
+          setState((prev) => ({
+            ...prev,
+            graph: restored.graph,
+            showWelcome: false,
+            progress: `Restored from cache: ${restored.projectName || restored.repoId}`,
+          }));
+
+          // Extract repo info from repoId if it's a GitHub repo
+          if (restored.repoId.startsWith('github:')) {
+            const match = restored.repoId.match(/^github:([^/]+)\/([^@]+)/);
+            if (match) {
+              setCurrentRepoInfo({ owner: match[1], repo: match[2] });
+            }
+          }
+        }
+      } catch (error) {
+        console.warn("Auto-restore failed:", error);
+      }
+    };
+
+    attemptAutoRestore();
+  }, [localPersistenceLoading, autoRestoreAttempted, restoreLastSession]);
 
   const updateState = useCallback((updates: Partial<AppState>) => {
     setState((prev) => ({ ...prev, ...updates }));
@@ -160,6 +211,59 @@ const HomePage: React.FC = () => {
     });
   }, [fetchAllHistory]);
 
+  // Sync analyzed commits with stored graphs when repo changes
+  useEffect(() => {
+    if (currentRepoInfo && currentRepoHistory) {
+      const storedCommitShas = new Set(
+        currentRepoHistory.commits.map((c) => c.commitSha)
+      );
+      setAnalyzedCommits(storedCommitShas);
+      console.log(
+        `📊 Synced ${storedCommitShas.size} analyzed commits for ${currentRepoInfo.owner}/${currentRepoInfo.repo}`
+      );
+      
+      // Auto-load the latest commit's graph if available
+      if (currentRepoHistory.commits.length > 0 && !currentCommitSha) {
+        // Commits are stored newest first, so first one is latest
+        const latestCommit = currentRepoHistory.commits[0];
+        console.log(`🔄 Auto-loading latest commit graph: ${latestCommit.commitSha.substring(0, 7)}`);
+        loadGraph(currentRepoInfo.owner, currentRepoInfo.repo, latestCommit.commitSha)
+          .then((graph) => {
+            if (graph) {
+              setCurrentCommitSha(latestCommit.commitSha);
+              updateState({ graph, fileContents: new Map() });
+            }
+          })
+          .catch((err) => {
+            console.warn("Failed to auto-load latest commit graph:", err);
+          });
+      }
+    }
+  }, [currentRepoInfo, currentRepoHistory, currentCommitSha, loadGraph, updateState]);
+
+  // Fetch repo history when repo is selected
+  useEffect(() => {
+    if (currentRepoInfo) {
+      fetchRepoHistory(currentRepoInfo.owner, currentRepoInfo.repo).catch(
+        (err) => {
+          console.warn("Failed to fetch repo history:", err);
+        }
+      );
+    }
+  }, [currentRepoInfo, fetchRepoHistory]);
+
+  // Extract repo info from githubUrl if currentRepoInfo is not set
+  useEffect(() => {
+    if (!currentRepoInfo && state.githubUrl) {
+      const urlMatch = state.githubUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
+      if (urlMatch) {
+        const [, owner, repo] = urlMatch;
+        console.log(`📦 Auto-extracting repo info from URL: ${owner}/${repo}`);
+        setCurrentRepoInfo({ owner, repo });
+      }
+    }
+  }, [state.githubUrl, currentRepoInfo]);
+
   const handleFileUpload = async (
     event: React.ChangeEvent<HTMLInputElement>
   ) => {
@@ -169,7 +273,8 @@ const HomePage: React.FC = () => {
       return;
     }
 
-    try {
+      try {
+      setLoadingStage("Extracting");
       updateState({
         isProcessing: true,
         error: "",
@@ -192,6 +297,9 @@ const HomePage: React.FC = () => {
         fileCount: result.fileContents?.size || 0,
       });
 
+      setLoadingStage("");
+      setLoadingProgress(undefined);
+      setCurrentCommitSha(null); // ZIP files don't have commits
       updateState({
         graph: result.graph,
         fileContents: result.fileContents,
@@ -220,6 +328,8 @@ const HomePage: React.FC = () => {
     if (!repos || repos.length === 0) return;
 
     try {
+      setLoadingStage("Initializing");
+      setLoadingProgress(0);
       updateState({
         isProcessing: true,
         error: "",
@@ -241,15 +351,31 @@ const HomePage: React.FC = () => {
       for (const repo of repos) {
         const url = `https://github.com/${repo.owner}/${repo.name}`;
 
+        setLoadingStage("Downloading");
+        setLoadingProgress(10);
         updateState({
           githubUrl: url,
-          progress: `Processing ${repo.fullName || url}...`,
+          progress: `Downloading ${repo.fullName || url}...`,
         });
 
         const result = await ingestionService.processGitHubRepo(url, {
           directoryFilter: state.directoryFilter,
           fileExtensions: state.fileExtensions,
           onProgress: (message: string) => {
+            // Update stage based on message
+            if (message.includes("Downloading") || message.includes("archive")) {
+              setLoadingStage("Downloading");
+              setLoadingProgress(20);
+            } else if (message.includes("Extracting") || message.includes("Discovered")) {
+              setLoadingStage("Extracting");
+              setLoadingProgress(40);
+            } else if (message.includes("Generating") || message.includes("Parsing")) {
+              setLoadingStage("Analyzing");
+              setLoadingProgress(60);
+            } else if (message.includes("Resolving") || message.includes("Call")) {
+              setLoadingStage("Building Graph");
+              setLoadingProgress(80);
+            }
             updateState({ progress: message });
           },
         });
@@ -260,11 +386,14 @@ const HomePage: React.FC = () => {
         });
 
         // Fetch commit history FIRST to get commit info
+        setLoadingStage("Fetching History");
+        setLoadingProgress(85);
         let latestCommitSha = `import-${Date.now()}`;
         let latestCommitMessage = "Initial import";
         let latestCommitDate = new Date().toISOString();
 
         try {
+          updateState({ progress: "Fetching commit history..." });
           const historyResult = await fetchCommitHistory(
             repo.owner,
             repo.name,
@@ -274,12 +403,14 @@ const HomePage: React.FC = () => {
             }
           );
 
-          // Get latest commit info if available
+          // Get latest commit info if available (first commit is newest after sort reversal)
           if (historyResult?.commits?.[0]) {
             const latestCommit = historyResult.commits[0];
             latestCommitSha = latestCommit.sha;
             latestCommitMessage = latestCommit.message;
             latestCommitDate = latestCommit.author?.date || latestCommitDate;
+            // Set current commit to latest
+            setCurrentCommitSha(latestCommitSha);
           }
         } catch (e) {
           console.warn("Commit history loading failed:", e);
@@ -287,6 +418,8 @@ const HomePage: React.FC = () => {
 
         // Store graph on the server for persistence
         try {
+          setLoadingStage("Saving");
+          setLoadingProgress(90);
           updateState({ progress: "Saving graph to server..." });
           console.log(
             `📤 Storing graph for ${repo.owner}/${
@@ -314,6 +447,8 @@ const HomePage: React.FC = () => {
         }
       }
 
+      setLoadingStage("");
+      setLoadingProgress(undefined);
       updateState({
         isProcessing: false,
         progress: "",
@@ -325,6 +460,8 @@ const HomePage: React.FC = () => {
       setShowGitHubRepoPicker(false);
     } catch (error) {
       console.error("GitHub processing error:", error);
+      setLoadingStage("");
+      setLoadingProgress(undefined);
       updateState({
         error:
           error instanceof Error
@@ -350,6 +487,8 @@ const HomePage: React.FC = () => {
 
     try {
       setLoadingCommitSha(commit.sha);
+      setLoadingStage("Analyzing Commit");
+      setLoadingProgress(0);
       updateState({
         progress: `Analyzing commit ${commit.sha.substring(0, 7)}...`,
       });
@@ -367,6 +506,19 @@ const HomePage: React.FC = () => {
         fileExtensions: state.fileExtensions,
         ref: commit.sha, // Download this specific commit
         onProgress: (message: string) => {
+          if (message.includes("Downloading")) {
+            setLoadingStage("Downloading");
+            setLoadingProgress(20);
+          } else if (message.includes("Extracting") || message.includes("Discovered")) {
+            setLoadingStage("Extracting");
+            setLoadingProgress(40);
+          } else if (message.includes("Generating") || message.includes("Parsing")) {
+            setLoadingStage("Analyzing");
+            setLoadingProgress(60);
+          } else if (message.includes("Resolving") || message.includes("Call")) {
+            setLoadingStage("Building Graph");
+            setLoadingProgress(80);
+          }
           updateState({ progress: message });
         },
       });
@@ -382,6 +534,9 @@ const HomePage: React.FC = () => {
       );
 
       // Update state
+      setLoadingStage("");
+      setLoadingProgress(undefined);
+      setCurrentCommitSha(commit.sha);
       updateState({
         graph: result.graph,
         fileContents: result.fileContents,
@@ -395,6 +550,8 @@ const HomePage: React.FC = () => {
       );
     } catch (error) {
       console.error("Failed to analyze commit:", error);
+      setLoadingStage("");
+      setLoadingProgress(undefined);
       updateState({
         error:
           error instanceof Error ? error.message : "Failed to analyze commit",
@@ -418,13 +575,18 @@ const HomePage: React.FC = () => {
 
     try {
       setLoadingCommitSha(commit.sha);
+      setLoadingStage("Loading Graph");
+      setLoadingProgress(50);
       updateState({
         progress: `Loading graph for commit ${commit.sha.substring(0, 7)}...`,
       });
 
       const graph = await loadGraph(owner, repo, commit.sha);
 
+      setLoadingStage("");
+      setLoadingProgress(undefined);
       if (graph) {
+        setCurrentCommitSha(commit.sha);
         updateState({
           graph: graph,
           progress: "",
@@ -436,12 +598,120 @@ const HomePage: React.FC = () => {
       }
     } catch (error) {
       console.error("Failed to load graph:", error);
+      setLoadingStage("");
+      setLoadingProgress(undefined);
       updateState({
         error: error instanceof Error ? error.message : "Failed to load graph",
         progress: "",
       });
     } finally {
       setLoadingCommitSha(null);
+    }
+  };
+
+  /**
+   * Handle batch analysis of multiple commits
+   */
+  const handleBatchAnalyzeCommits = async (commits: any[]) => {
+    if (!currentRepoInfo || commits.length === 0) {
+      return;
+    }
+
+    const { owner, repo } = currentRepoInfo;
+    const githubToken = getGitHubAccessToken();
+    const ingestionService = new IngestionService(githubToken);
+
+    const totalCommits = commits.length;
+    let processed = 0;
+    const successful: string[] = [];
+    const failed: Array<{ sha: string; error: string }> = [];
+
+    setLoadingStage("Batch Analysis");
+    setLoadingProgress(0);
+    updateState({
+      progress: `Analyzing ${totalCommits} commits... (0/${totalCommits})`,
+      isProcessing: true,
+    });
+
+    for (const commit of commits) {
+      try {
+        setLoadingCommitSha(commit.sha);
+        setLoadingStage("Analyzing Commit");
+        setLoadingProgress(Math.round((processed / totalCommits) * 100));
+        updateState({
+          progress: `Analyzing commit ${commit.sha.substring(0, 7)}... (${processed + 1}/${totalCommits})`,
+        });
+
+        const result = await ingestionService.processGitHubRepo(
+          `https://github.com/${owner}/${repo}`,
+          {
+            directoryFilter: state.directoryFilter,
+            fileExtensions: state.fileExtensions,
+            ref: commit.sha,
+            onProgress: (message: string) => {
+              updateState({
+                progress: `[${processed + 1}/${totalCommits}] ${message}`,
+              });
+            },
+          }
+        );
+
+        // Store graph for this commit
+        await storeGraph(
+          owner,
+          repo,
+          commit.sha,
+          commit.message,
+          commit.author?.date || new Date().toISOString(),
+          result.graph
+        );
+
+        successful.push(commit.sha);
+        setAnalyzedCommits((prev) => new Set([...prev, commit.sha]));
+        processed++;
+
+        console.log(
+          `✅ [${processed}/${totalCommits}] Analyzed commit ${commit.sha.substring(0, 7)}`
+        );
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown error";
+        failed.push({ sha: commit.sha, error: errorMessage });
+        processed++;
+        console.error(
+          `❌ [${processed}/${totalCommits}] Failed to analyze commit ${commit.sha.substring(0, 7)}:`,
+          error
+        );
+      } finally {
+        setLoadingCommitSha(null);
+      }
+
+      // Small delay to avoid rate limiting
+      if (processed < totalCommits) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    }
+
+    setLoadingStage("");
+    setLoadingProgress(undefined);
+    updateState({
+      isProcessing: false,
+      progress: `Completed: ${successful.length} successful, ${failed.length} failed`,
+    });
+
+    if (failed.length > 0) {
+      console.warn("Some commits failed to analyze:", failed);
+      updateState({
+        error: `${failed.length} commit(s) failed to analyze. Check console for details.`,
+      });
+    }
+
+    // Load the last successfully analyzed commit's graph
+    if (successful.length > 0) {
+      const lastCommit = commits.find((c) => successful.includes(c.sha));
+      if (lastCommit) {
+        await handleLoadGraph(lastCommit);
+      }
     }
   };
 
@@ -824,7 +1094,19 @@ const HomePage: React.FC = () => {
         {state.isProcessing && (
           <div style={styles.progressBanner}>
             <div style={styles.spinner}></div>
-            {state.progress}
+            <div style={{ flex: 1 }}>
+              {loadingStage && (
+                <div style={{ fontSize: "12px", fontWeight: "600", marginBottom: "4px", color: colors.primary }}>
+                  {loadingStage}
+                </div>
+              )}
+              <div>{state.progress}</div>
+              {loadingProgress !== undefined && (
+                <div style={{ marginTop: "8px", width: "100%", height: "4px", backgroundColor: colors.border, borderRadius: "2px", overflow: "hidden" }}>
+                  <div style={{ width: `${loadingProgress}%`, height: "100%", backgroundColor: colors.primary, transition: "width 0.3s ease" }} />
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -904,6 +1186,26 @@ const HomePage: React.FC = () => {
             <span>{state.graph?.relationships.length || 0} relationships</span>
             <span>•</span>
             <span>{state.fileContents?.size || 0} files</span>
+            {currentCommitSha && commitTimeline && (
+              <>
+                <span>•</span>
+                <span style={{ 
+                  color: colors.primary, 
+                  fontWeight: "600",
+                  fontSize: "13px"
+                }} title={`Currently viewing commit ${currentCommitSha.substring(0, 7)}`}>
+                  📌 {currentCommitSha.substring(0, 7)}
+                  {(() => {
+                    const commit = commitTimeline.commits.find(c => c.sha === currentCommitSha);
+                    if (commit) {
+                      const msg = commit.message.split('\n')[0];
+                      return ` - ${msg.length > 35 ? msg.substring(0, 35) + '...' : msg}`;
+                    }
+                    return '';
+                  })()}
+                </span>
+              </>
+            )}
           </div>
           <div
             style={{
@@ -915,7 +1217,105 @@ const HomePage: React.FC = () => {
             className="navbar-buttons-responsive"
           >
             <button
-              onClick={() => updateState({ showHistory: true })}
+              onClick={async () => {
+                updateState({ showHistory: true });
+                
+                // Determine repo info - use currentRepoInfo or extract from githubUrl
+                let repoInfo = currentRepoInfo;
+                
+                if (!repoInfo && state.githubUrl) {
+                  // Try to extract repo info from githubUrl if available
+                  const urlMatch = state.githubUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
+                  if (urlMatch) {
+                    const [, owner, repo] = urlMatch;
+                    repoInfo = { owner, repo };
+                    setCurrentRepoInfo(repoInfo);
+                    console.log(`📦 Extracted repo info from URL: ${owner}/${repo}`);
+                  }
+                }
+                
+                // If we have repo info but no commit timeline, fetch it
+                if (repoInfo && !commitTimeline && !historyLoading) {
+                  try {
+                    console.log(`📜 Fetching commit history for ${repoInfo.owner}/${repoInfo.repo}...`);
+                    console.log(`🔑 GitHub token available: ${githubToken ? 'YES' : 'NO'}`);
+                    
+                    setLoadingStage("Fetching History");
+                    setLoadingProgress(50);
+                    
+                    const timeline = await fetchCommitHistory(
+                      repoInfo.owner,
+                      repoInfo.repo,
+                      { maxCommits: 100 }
+                    );
+                    
+                    setLoadingStage("");
+                    setLoadingProgress(undefined);
+                    console.log(`✅ Successfully fetched commit history`);
+                    
+                    // Auto-load the latest commit's graph if available
+                    if (timeline && timeline.commits.length > 0) {
+                      const latestCommit = timeline.commits[0]; // First commit is newest (after sort reversal)
+                      const hasGraph = analyzedCommits.has(latestCommit.sha);
+                      
+                      if (hasGraph && repoInfo) {
+                        console.log(`🔄 Auto-loading latest commit graph: ${latestCommit.sha.substring(0, 7)}`);
+                        try {
+                          const graph = await loadGraph(repoInfo.owner, repoInfo.repo, latestCommit.sha);
+                          if (graph) {
+                            setCurrentCommitSha(latestCommit.sha);
+                            updateState({ graph, fileContents: new Map() });
+                          }
+                        } catch (err) {
+                          console.warn("Failed to auto-load latest commit graph:", err);
+                        }
+                      } else if (!hasGraph) {
+                        // If no graph exists, analyze the latest commit
+                        console.log(`🔄 Auto-analyzing latest commit: ${latestCommit.sha.substring(0, 7)}`);
+                        try {
+                          const githubToken = getGitHubAccessToken();
+                          const ingestionService = new IngestionService(githubToken);
+                          const result = await ingestionService.processGitHubRepo(
+                            `https://github.com/${repoInfo.owner}/${repoInfo.repo}`,
+                            {
+                              directoryFilter: state.directoryFilter,
+                              fileExtensions: state.fileExtensions,
+                              ref: latestCommit.sha,
+                              onProgress: (message: string) => {
+                                updateState({ progress: message });
+                              },
+                            }
+                          );
+                          await storeGraph(
+                            repoInfo.owner,
+                            repoInfo.repo,
+                            latestCommit.sha,
+                            latestCommit.message,
+                            latestCommit.author?.date || new Date().toISOString(),
+                            result.graph
+                          );
+                          setCurrentCommitSha(latestCommit.sha);
+                          setAnalyzedCommits((prev) => new Set([...prev, latestCommit.sha]));
+                          updateState({
+                            graph: result.graph,
+                            fileContents: result.fileContents,
+                            progress: "",
+                          });
+                        } catch (err) {
+                          console.warn("Failed to auto-analyze latest commit:", err);
+                        }
+                      }
+                    }
+                  } catch (error) {
+                    console.error("❌ Failed to fetch commit history:", error);
+                    setLoadingStage("");
+                    setLoadingProgress(undefined);
+                    // Error is already handled by useCommitHistory hook and displayed in the modal
+                  }
+                } else if (!repoInfo) {
+                  console.warn("⚠️ No repository info available. Cannot fetch commit history.");
+                }
+              }}
               style={{
                 ...styles.navbarButton,
                 backgroundColor: colors.surfaceWarm,
@@ -1191,8 +1591,59 @@ const HomePage: React.FC = () => {
     );
   };
 
+  // Parse progress message to extract stage and progress
+  const parseProgress = (message: string) => {
+    let stage = "";
+    let progress: number | undefined = undefined;
+    let subMessage = message;
+
+    // Extract stage from common patterns
+    if (message.includes("Downloading")) {
+      stage = "Downloading";
+    } else if (message.includes("Extracting") || message.includes("Reading ZIP")) {
+      stage = "Extracting";
+    } else if (message.includes("Processing") || message.includes("Discovering")) {
+      stage = "Processing";
+    } else if (message.includes("Generating") || message.includes("Analyzing")) {
+      stage = "Analyzing";
+    } else if (message.includes("Saving") || message.includes("Storing")) {
+      stage = "Saving";
+    } else if (message.includes("Loading")) {
+      stage = "Loading";
+    }
+
+    // Extract progress percentage if available
+    const progressMatch = message.match(/(\d+)%/);
+    if (progressMatch) {
+      progress = parseInt(progressMatch[1]);
+    }
+
+    // Extract progress from "X/Y" format
+    const countMatch = message.match(/(\d+)\/(\d+)/);
+    if (countMatch && !progress) {
+      const current = parseInt(countMatch[1]);
+      const total = parseInt(countMatch[2]);
+      progress = Math.round((current / total) * 100);
+      subMessage = `${message} (${progress}%)`;
+    }
+
+    return { stage, progress, subMessage };
+  };
+
+  const progressInfo = state.progress ? parseProgress(state.progress) : null;
+
   return (
     <ErrorBoundary>
+      {/* Global Loading Indicator */}
+      <LoadingIndicator
+        isVisible={state.isProcessing || !!loadingCommitSha}
+        message={state.progress || (loadingCommitSha ? "Processing commit..." : "Loading...")}
+        stage={progressInfo?.stage || loadingStage || (loadingCommitSha ? "Analyzing Commit" : undefined)}
+        progress={progressInfo?.progress || loadingProgress}
+        subMessage={progressInfo?.subMessage || (loadingCommitSha ? `Commit: ${loadingCommitSha.substring(0, 7)}` : undefined)}
+        size="large"
+      />
+      
       <div style={styles.container}>
         <style>{`
           @keyframes spin {
@@ -1589,7 +2040,7 @@ const HomePage: React.FC = () => {
         )}
 
         {/* Commit History Modal */}
-        {state.showHistory && commitTimeline && (
+        {state.showHistory && (
           <div
             style={{
               position: "fixed",
@@ -1653,29 +2104,153 @@ const HomePage: React.FC = () => {
                 </button>
               </div>
 
-              {historyError && (
-                <div style={{ color: colors.textMuted, marginBottom: "12px" }}>
-                  ⚠️ Commit history error: {historyError}
+              {!currentRepoInfo ? (
+                <div
+                  style={{
+                    padding: "40px",
+                    textAlign: "center",
+                    color: colors.textMuted,
+                  }}
+                >
+                  <div style={{ fontSize: "48px", marginBottom: "16px" }}>
+                    📦
+                  </div>
+                  <h3 style={{ color: colors.text, marginBottom: "8px" }}>
+                    No Repository Selected
+                  </h3>
+                  <p style={{ marginBottom: "20px" }}>
+                    Connect a GitHub repository to view commit history and
+                    analyze different versions of your codebase.
+                  </p>
+                  <button
+                    onClick={() => {
+                      updateState({ showHistory: false });
+                      setShowGitHubRepoPicker(true);
+                    }}
+                    style={styles.primaryButton}
+                  >
+                    Connect GitHub Repository
+                  </button>
+                </div>
+              ) : historyError ? (
+                <div
+                  style={{
+                    padding: "40px",
+                    textAlign: "center",
+                    color: colors.textMuted,
+                  }}
+                >
+                  <div style={{ fontSize: "48px", marginBottom: "16px" }}>
+                    ⚠️
+                  </div>
+                  <h3 style={{ color: colors.text, marginBottom: "8px" }}>
+                    Error Loading Commit History
+                  </h3>
+                  <p style={{ marginBottom: "20px" }}>{historyError}</p>
+                  {currentRepoInfo && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          setLoadingStage("Fetching History");
+                          setLoadingProgress(50);
+                          const timeline = await fetchCommitHistory(
+                            currentRepoInfo.owner,
+                            currentRepoInfo.repo,
+                            { maxCommits: 100 }
+                          );
+                          setLoadingStage("");
+                          setLoadingProgress(undefined);
+                          
+                          // Auto-load latest commit if available
+                          if (timeline && timeline.commits.length > 0) {
+                            const latestCommit = timeline.commits[0];
+                            const hasGraph = analyzedCommits.has(latestCommit.sha);
+                            if (hasGraph) {
+                              const graph = await loadGraph(currentRepoInfo.owner, currentRepoInfo.repo, latestCommit.sha);
+                              if (graph) {
+                                setCurrentCommitSha(latestCommit.sha);
+                                updateState({ graph, fileContents: new Map() });
+                              }
+                            }
+                          }
+                        } catch (error) {
+                          console.error("Retry failed:", error);
+                          setLoadingStage("");
+                          setLoadingProgress(undefined);
+                        }
+                      }}
+                      style={styles.primaryButton}
+                    >
+                      Retry
+                    </button>
+                  )}
+                </div>
+              ) : !commitTimeline && historyLoading ? (
+                <div
+                  style={{
+                    padding: "40px",
+                    textAlign: "center",
+                    color: colors.textMuted,
+                  }}
+                >
+                  <div style={{ fontSize: "48px", marginBottom: "16px" }}>
+                    ⏳
+                  </div>
+                  <h3 style={{ color: colors.text, marginBottom: "8px" }}>
+                    Loading Commit History...
+                  </h3>
+                  <p>Fetching commits from {currentRepoInfo.owner}/{currentRepoInfo.repo}</p>
+                </div>
+              ) : commitTimeline ? (
+                <>
+                  {historyError && (
+                    <div
+                      style={{ color: colors.textMuted, marginBottom: "12px" }}
+                    >
+                      ⚠️ Commit history error: {historyError}
+                    </div>
+                  )}
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))",
+                      gap: "16px",
+                    }}
+                  >
+                    <ProjectEvolutionStats timeline={commitTimeline} />
+                    <CommitHistoryViewer
+                      onBatchAnalyze={handleBatchAnalyzeCommits}
+                      timeline={commitTimeline}
+                      isLoading={historyLoading}
+                      analyzedCommits={analyzedCommits}
+                      loadingCommitSha={loadingCommitSha}
+                      onAnalyzeCommit={handleAnalyzeCommit}
+                      onLoadGraph={handleLoadGraph}
+                    />
+                  </div>
+                </>
+              ) : (
+                <div
+                  style={{
+                    padding: "40px",
+                    textAlign: "center",
+                    color: colors.textMuted,
+                  }}
+                >
+                  <div style={{ fontSize: "48px", marginBottom: "16px" }}>
+                    📭
+                  </div>
+                  <h3 style={{ color: colors.text, marginBottom: "8px" }}>
+                    No Commit History Available
+                  </h3>
+                  <p>
+                    Unable to load commit history for{" "}
+                    {currentRepoInfo.owner}/{currentRepoInfo.repo}. Make sure
+                    you have access to this repository.
+                  </p>
                 </div>
               )}
-
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))",
-                  gap: "16px",
-                }}
-              >
-                <ProjectEvolutionStats timeline={commitTimeline} />
-                <CommitHistoryViewer
-                  timeline={commitTimeline}
-                  isLoading={historyLoading}
-                  analyzedCommits={analyzedCommits}
-                  loadingCommitSha={loadingCommitSha}
-                  onAnalyzeCommit={handleAnalyzeCommit}
-                  onLoadGraph={handleLoadGraph}
-                />
-              </div>
             </div>
           </div>
         )}

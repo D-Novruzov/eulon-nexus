@@ -16,6 +16,7 @@ interface CommitHistoryViewerProps {
   onCommitSelect?: (commit: CommitInfo) => void;
   onAnalyzeCommit?: (commit: CommitInfo) => void;
   onLoadGraph?: (commit: CommitInfo) => void;
+  onBatchAnalyze?: (commits: CommitInfo[]) => void; // Batch analyze multiple commits
   analyzedCommits?: Set<string>; // Set of commit SHAs that have graphs stored
   loadingCommitSha?: string | null; // Currently loading commit
   isLoading?: boolean;
@@ -26,6 +27,7 @@ const CommitHistoryViewer: React.FC<CommitHistoryViewerProps> = ({
   onCommitSelect,
   onAnalyzeCommit,
   onLoadGraph,
+  onBatchAnalyze,
   analyzedCommits = new Set(),
   loadingCommitSha = null,
   isLoading = false,
@@ -34,6 +36,10 @@ const CommitHistoryViewer: React.FC<CommitHistoryViewerProps> = ({
     null
   );
   const [filterAuthor, setFilterAuthor] = useState<string>("");
+  const [selectedCommits, setSelectedCommits] = useState<Set<string>>(
+    new Set()
+  );
+  const [batchMode, setBatchMode] = useState(false);
 
   if (isLoading) {
     return (
@@ -111,45 +117,118 @@ const CommitHistoryViewer: React.FC<CommitHistoryViewerProps> = ({
             {new Date(timeline.stats.dateRange.latest).toLocaleDateString()}
           </span>
         </div>
+        <div style={{
+          marginTop: "12px",
+          padding: "10px",
+          backgroundColor: "#e3f2fd",
+          borderRadius: "6px",
+          fontSize: "12px",
+          color: "#1565c0",
+          border: "1px solid #90caf9"
+        }}>
+          <div style={{ fontWeight: "600", marginBottom: "4px" }}>💡 What do the buttons do?</div>
+          <div style={{ marginLeft: "8px" }}>
+            <div><strong>📊 Load Graph:</strong> Instantly display a previously analyzed graph (fast - already stored)</div>
+            <div><strong>🔍 Analyze:</strong> Download code at this commit and generate a new graph (takes time - processes the codebase)</div>
+          </div>
+        </div>
       </div>
 
-      {authors.length > 1 && (
-        <div style={styles.filterSection}>
-          <label style={styles.filterLabel}>Filter by author:</label>
-          <select
-            value={filterAuthor}
-            onChange={(e) => setFilterAuthor(e.target.value)}
-            style={styles.filterSelect}
-          >
-            <option value="">All authors ({timeline.commits.length})</option>
-            {authors.map((author) => (
-              <option key={author} value={author}>
-                {author} (
-                {
-                  timeline.commits.filter((c) => c.author.name === author)
-                    .length
+      <div style={styles.controlsSection}>
+        {authors.length > 1 && (
+          <div style={styles.filterSection}>
+            <label style={styles.filterLabel}>Filter by author:</label>
+            <select
+              value={filterAuthor}
+              onChange={(e) => setFilterAuthor(e.target.value)}
+              style={styles.filterSelect}
+            >
+              <option value="">All authors ({timeline.commits.length})</option>
+              {authors.map((author) => (
+                <option key={author} value={author}>
+                  {author} (
+                  {
+                    timeline.commits.filter((c) => c.author.name === author)
+                      .length
+                  }
+                  )
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        <div style={styles.batchControls}>
+          <label style={styles.batchLabel}>
+            <input
+              type="checkbox"
+              checked={batchMode}
+              onChange={(e) => {
+                setBatchMode(e.target.checked);
+                if (!e.target.checked) {
+                  setSelectedCommits(new Set());
                 }
-                )
-              </option>
-            ))}
-          </select>
+              }}
+              style={styles.checkbox}
+            />
+            Batch Mode
+          </label>
+          {batchMode && selectedCommits.size > 0 && (
+            <button
+              style={styles.batchAnalyzeButton}
+              onClick={() => {
+                const commitsToAnalyze = filteredCommits.filter((c) =>
+                  selectedCommits.has(c.sha)
+                );
+                onBatchAnalyze?.(commitsToAnalyze);
+                setSelectedCommits(new Set());
+                setBatchMode(false);
+              }}
+            >
+              🔍 Analyze {selectedCommits.size} Selected
+            </button>
+          )}
         </div>
-      )}
+      </div>
 
       <div style={styles.timelineContainer}>
+        {/* Reverse the commits array to show newest first (commits are already sorted newest first from service) */}
         {filteredCommits.map((commit, index) => {
           const isSelected = selectedCommitSha === commit.sha;
-          const isFirst = index === 0;
-          const isLast = index === filteredCommits.length - 1;
+          const isFirst = index === 0; // First in list = newest
+          const isLast = index === filteredCommits.length - 1; // Last in list = oldest
+
+          const hasGraph = analyzedCommits.has(commit.sha);
+          const isSelectedForBatch = selectedCommits.has(commit.sha);
+          const isCurrentlyLoading = loadingCommitSha === commit.sha;
 
           return (
             <div key={commit.sha} style={styles.commitItem}>
               <div style={styles.timelineMarker}>
+                {batchMode && (
+                  <input
+                    type="checkbox"
+                    checked={isSelectedForBatch}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      const newSelected = new Set(selectedCommits);
+                      if (e.target.checked) {
+                        newSelected.add(commit.sha);
+                      } else {
+                        newSelected.delete(commit.sha);
+                      }
+                      setSelectedCommits(newSelected);
+                    }}
+                    style={styles.commitCheckbox}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                )}
                 <div
                   style={{
                     ...styles.dot,
                     ...(isSelected && styles.dotSelected),
+                    ...(hasGraph && styles.dotWithGraph),
                   }}
+                  title={hasGraph ? "Graph available" : "No graph yet"}
                 />
                 {!isLast && <div style={styles.line} />}
               </div>
@@ -158,13 +237,24 @@ const CommitHistoryViewer: React.FC<CommitHistoryViewerProps> = ({
                 style={{
                   ...styles.commitContent,
                   ...(isSelected && styles.commitContentSelected),
+                  ...(hasGraph && styles.commitContentWithGraph),
+                  ...(isSelectedForBatch && styles.commitContentBatchSelected),
                 }}
-                onClick={() => handleCommitClick(commit)}
+                onClick={() => {
+                  if (!batchMode) {
+                    handleCommitClick(commit);
+                  }
+                }}
               >
                 <div style={styles.commitHeader}>
                   <span style={styles.commitSha}>
                     {commit.sha.substring(0, 7)}
                   </span>
+                  {hasGraph && (
+                    <span style={styles.graphBadge} title="Graph available">
+                      📊 Graph
+                    </span>
+                  )}
                   <span style={styles.commitTime}>
                     {formatDate(commit.timestamp)}
                   </span>
@@ -183,35 +273,39 @@ const CommitHistoryViewer: React.FC<CommitHistoryViewerProps> = ({
                   </span>
 
                   {/* Graph action buttons */}
-                  <div style={styles.commitActions}>
-                    {analyzedCommits.has(commit.sha) ? (
-                      <button
-                        style={styles.loadGraphButton}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onLoadGraph?.(commit);
-                        }}
-                        disabled={loadingCommitSha === commit.sha}
-                      >
-                        {loadingCommitSha === commit.sha
-                          ? "⏳ Loading..."
-                          : "📊 Load Graph"}
-                      </button>
-                    ) : (
-                      <button
-                        style={styles.analyzeButton}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onAnalyzeCommit?.(commit);
-                        }}
-                        disabled={loadingCommitSha === commit.sha}
-                      >
-                        {loadingCommitSha === commit.sha
-                          ? "⏳ Analyzing..."
-                          : "🔍 Analyze"}
-                      </button>
-                    )}
-                  </div>
+                  {!batchMode && (
+                    <div style={styles.commitActions}>
+                      {hasGraph ? (
+                        <button
+                          style={styles.loadGraphButton}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onLoadGraph?.(commit);
+                          }}
+                          disabled={isCurrentlyLoading}
+                          title="Load Graph: Display the previously analyzed graph for this commit (fast - already stored)"
+                        >
+                          {isCurrentlyLoading
+                            ? "⏳ Loading..."
+                            : "📊 Load Graph"}
+                        </button>
+                      ) : (
+                        <button
+                          style={styles.analyzeButton}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onAnalyzeCommit?.(commit);
+                          }}
+                          disabled={isCurrentlyLoading}
+                          title="Analyze: Download code at this commit and generate a new graph (takes time - processes the codebase)"
+                        >
+                          {isCurrentlyLoading
+                            ? "⏳ Analyzing..."
+                            : "🔍 Analyze"}
+                        </button>
+                      )}
+                    </div>
+                  )}
 
                   <a
                     href={commit.htmlUrl}
@@ -282,11 +376,56 @@ const styles = {
     alignItems: "center",
     gap: "5px",
   },
-  filterSection: {
+  controlsSection: {
     marginBottom: "20px",
+    display: "flex" as const,
+    flexDirection: "column" as const,
+    gap: "15px",
+  },
+  filterSection: {
     display: "flex" as const,
     gap: "10px",
     alignItems: "center",
+  },
+  batchControls: {
+    display: "flex" as const,
+    gap: "15px",
+    alignItems: "center",
+    padding: "10px",
+    backgroundColor: "#f0f7ff",
+    borderRadius: "6px",
+    border: "1px solid #d0e7ff",
+  },
+  batchLabel: {
+    display: "flex" as const,
+    alignItems: "center",
+    gap: "8px",
+    fontWeight: "500" as const,
+    color: "#333",
+    fontSize: "14px",
+    cursor: "pointer" as const,
+  },
+  checkbox: {
+    cursor: "pointer" as const,
+    width: "16px",
+    height: "16px",
+  },
+  commitCheckbox: {
+    cursor: "pointer" as const,
+    width: "18px",
+    height: "18px",
+    marginBottom: "5px",
+  },
+  batchAnalyzeButton: {
+    padding: "6px 14px",
+    fontSize: "13px",
+    fontWeight: "600" as const,
+    backgroundColor: "#3498db",
+    color: "white",
+    border: "none",
+    borderRadius: "5px",
+    cursor: "pointer" as const,
+    transition: "background-color 0.2s",
   },
   filterLabel: {
     fontWeight: "500" as const,
@@ -330,6 +469,10 @@ const styles = {
     backgroundColor: "#e74c3c",
     boxShadow: "0 0 0 3px rgba(231, 76, 60, 0.2)",
   },
+  dotWithGraph: {
+    backgroundColor: "#27ae60",
+    border: "2px solid #1e8449",
+  },
   line: {
     flex: 1,
     width: "2px",
@@ -351,6 +494,15 @@ const styles = {
     boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
     backgroundColor: "#fff9f7",
   },
+  commitContentWithGraph: {
+    borderLeftColor: "#27ae60",
+    backgroundColor: "#f0fdf4",
+  },
+  commitContentBatchSelected: {
+    backgroundColor: "#e3f2fd",
+    borderLeftColor: "#2196f3",
+    boxShadow: "0 2px 6px rgba(33, 150, 243, 0.2)",
+  },
   commitHeader: {
     display: "flex" as const,
     gap: "12px",
@@ -366,6 +518,14 @@ const styles = {
     fontSize: "12px",
     fontWeight: "bold" as const,
     color: "#333",
+  },
+  graphBadge: {
+    fontSize: "11px",
+    backgroundColor: "#27ae60",
+    color: "white",
+    padding: "2px 6px",
+    borderRadius: "3px",
+    fontWeight: "600" as const,
   },
   commitTime: {
     fontSize: "13px",

@@ -9,3 +9,5 @@ export * from './utils.js';
 export * from './validation.js';
 export * from './web-worker-pool.js';
 export * from './workerUtils.js';
+export * from './graph-persistence.js';
+export * from './content-hasher.js';

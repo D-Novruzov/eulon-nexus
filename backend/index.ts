@@ -586,7 +586,7 @@ app.post("/integrations/github/import", async (req: Request, res: Response) => {
 
 /**
  * GET /integrations/github/archive/:owner/:repo/:branch
- * Download repository as ZIP archive
+ * Download repository as ZIP archive for a specific branch
  * This is much faster than individual API calls (only 1 request!)
  * Works for both authenticated and unauthenticated requests (public repos)
  */
@@ -672,6 +672,98 @@ app.get(
         }
       }
       res.status(500).json({ error: "Failed to download repository archive" });
+    }
+  }
+);
+
+/**
+ * GET /integrations/github/archive/:owner/:repo/commit/:commitSha
+ * Download repository as ZIP archive for a specific commit SHA
+ * This allows downloading the exact state of the repository at a given commit
+ */
+app.get(
+  "/integrations/github/archive/:owner/:repo/commit/:commitSha",
+  async (req: Request, res: Response) => {
+    const { owner, repo, commitSha } = req.params;
+
+    if (!owner || !repo || !commitSha) {
+      return res.status(400).json({ error: "Missing required parameters" });
+    }
+
+    // Try to get session for authenticated requests, but don't require it
+    let accessToken: string | undefined;
+    const sessionToken = req.headers["x-session-token"] as string | undefined;
+
+    if (sessionToken && sessionTokens.has(sessionToken)) {
+      const tokenData = sessionTokens.get(sessionToken)!;
+      if (Date.now() <= tokenData.expiresAt) {
+        accessToken = tokenData.githubAccessToken;
+        console.log("📦 Using authenticated download for commit archive");
+      }
+    } else if (req.session?.githubAccessToken) {
+      accessToken = req.session.githubAccessToken;
+      console.log("📦 Using authenticated download for commit archive (session)");
+    } else {
+      console.log(
+        "📦 Using unauthenticated download for commit archive (public repo)"
+      );
+    }
+
+    try {
+      console.log(`📦 Downloading archive for ${owner}/${repo}@${commitSha.substring(0, 7)}...`);
+
+      // Download the archive from GitHub for a specific commit
+      // Format: https://github.com/{owner}/{repo}/archive/{commitSha}.zip
+      const archiveUrl = `https://github.com/${owner}/${repo}/archive/${commitSha}.zip`;
+      const headers: Record<string, string> = {
+        "User-Agent": "GitNexus/1.0",
+      };
+
+      // Add authentication if available (for private repos or higher rate limits)
+      if (accessToken) {
+        headers["Authorization"] = `Bearer ${accessToken}`;
+      }
+
+      const response = await axios.get(archiveUrl, {
+        headers,
+        responseType: "arraybuffer",
+        maxContentLength: 100 * 1024 * 1024, // 100MB limit
+        timeout: 60000, // 60 second timeout
+      });
+
+      const archiveSizeMB = (response.data.byteLength / 1024 / 1024).toFixed(2);
+      console.log(
+        `✅ Downloaded ${archiveSizeMB}MB commit archive ${
+          accessToken ? "(authenticated)" : "(public)"
+        }`
+      );
+
+      // Set appropriate headers
+      res.setHeader("Content-Type", "application/zip");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${repo}-${commitSha.substring(0, 7)}.zip"`
+      );
+      res.setHeader("Content-Length", response.data.byteLength);
+
+      // Send the archive
+      res.send(Buffer.from(response.data));
+    } catch (error) {
+      console.error("GitHub commit archive download error:", error);
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 404) {
+          return res
+            .status(404)
+            .json({ error: "Repository or commit not found" });
+        }
+        if (error.response?.status === 403) {
+          return res.status(403).json({
+            error: "Access denied or rate limit exceeded",
+            hint: "Try authenticating with GitHub for higher rate limits",
+          });
+        }
+      }
+      res.status(500).json({ error: "Failed to download commit archive" });
     }
   }
 );

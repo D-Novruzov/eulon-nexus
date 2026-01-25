@@ -21,6 +21,7 @@ export interface ArchiveOptions {
   useBackendProxy?: boolean; // Use backend proxy for authenticated downloads
   backendUrl?: string; // Backend URL (default: http://localhost:4000)
   accessToken?: string; // GitHub access token for authenticated downloads
+  isCommitSha?: boolean; // If true, refOrBranch is a commit SHA, otherwise it's a branch name
 }
 
 export class GitHubArchiveService {
@@ -42,11 +43,13 @@ export class GitHubArchiveService {
   /**
    * Download and process repository using GitHub's archive feature
    * This is much faster than individual API calls (only 1 request!)
+   * @param refOrBranch - Branch name (e.g., "main") or commit SHA (e.g., "abc1234")
+   * @param options.isCommitSha - If true, refOrBranch is treated as a commit SHA
    */
   async getRepositoryArchive(
     owner: string,
     repo: string,
-    branch: string = "main",
+    refOrBranch: string = "main",
     onProgress?: (progress: ArchiveProgress) => void,
     options: ArchiveOptions = {}
   ): Promise<ArchiveRepositoryStructure> {
@@ -55,6 +58,7 @@ export class GitHubArchiveService {
       useBackendProxy = false,
       backendUrl = this.defaultBackendUrl,
       accessToken,
+      isCommitSha = false,
     } = options;
 
     try {
@@ -72,9 +76,12 @@ export class GitHubArchiveService {
 
       // Try 1: Backend proxy (works best, no CORS issues)
       try {
-        console.log("📦 Attempting backend proxy for archive download...");
+        console.log(`📦 Attempting backend proxy for archive download (${isCommitSha ? 'commit' : 'branch'}: ${refOrBranch})...`);
+        const endpoint = isCommitSha 
+          ? `${backendUrl}/integrations/github/archive/${owner}/${repo}/commit/${refOrBranch}`
+          : `${backendUrl}/integrations/github/archive/${owner}/${repo}/${refOrBranch}`;
         response = await fetch(
-          `${backendUrl}/integrations/github/archive/${owner}/${repo}/${branch}`,
+          endpoint,
           {
             headers: accessToken ? { "X-Session-Token": accessToken } : {},
             credentials: "include",
@@ -96,7 +103,12 @@ export class GitHubArchiveService {
         // Try 2: Direct download from GitHub (works for public repos)
         try {
           console.log("📦 Attempting direct download from GitHub...");
-          const archiveUrl = `https://github.com/${owner}/${repo}/archive/refs/heads/${branch}.zip`;
+          // GitHub archive URLs: 
+          // For branches: https://github.com/{owner}/{repo}/archive/refs/heads/{branch}.zip
+          // For commits: https://github.com/{owner}/{repo}/archive/{commitSha}.zip
+          const archiveUrl = isCommitSha
+            ? `https://github.com/${owner}/${repo}/archive/${refOrBranch}.zip`
+            : `https://github.com/${owner}/${repo}/archive/refs/heads/${refOrBranch}.zip`;
           response = await fetch(archiveUrl, {
             headers: accessToken
               ? { Authorization: `Bearer ${accessToken}` }
@@ -116,7 +128,9 @@ export class GitHubArchiveService {
 
           // Try 3: CORS proxy as last resort
           console.log("📦 Attempting CORS proxy download...");
-          const archiveUrl = `https://github.com/${owner}/${repo}/archive/refs/heads/${branch}.zip`;
+          const archiveUrl = isCommitSha
+            ? `https://github.com/${owner}/${repo}/archive/${refOrBranch}.zip`
+            : `https://github.com/${owner}/${repo}/archive/refs/heads/${refOrBranch}.zip`;
           response = await this.proxyService.downloadWithProxy(archiveUrl, {
             useProxy: true,
             timeout: 60000,
