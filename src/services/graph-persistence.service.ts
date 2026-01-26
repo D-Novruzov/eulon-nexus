@@ -182,37 +182,54 @@ export class GraphPersistenceService {
       `📥 Loading graph for ${owner}/${repo}@${commitSha.substring(0, 7)}`
     );
 
-    const response = await fetch(
-      `${BACKEND_URL}/api/analysis/graph/${owner}/${repo}/${commitSha}`
-    );
+    // Add timeout to prevent hanging (30 seconds)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, 30000);
 
-    if (response.status === 404) {
-      console.log(`📭 Graph not found for ${commitSha.substring(0, 7)}`);
-      return null;
-    }
-
-    const result = await this.safeParseJSON(response);
-
-    if (!response.ok) {
-      const errorMsg =
-        result?.error || result?.details || `Server error: ${response.status}`;
-      console.error(`❌ Failed to load graph: ${errorMsg}`);
-      throw new Error(errorMsg);
-    }
-
-    if (!result?.graph) {
-      console.log(
-        `📭 No graph data in response for ${commitSha.substring(0, 7)}`
+    try {
+      const response = await fetch(
+        `${BACKEND_URL}/api/analysis/graph/${owner}/${repo}/${commitSha}`,
+        { signal: controller.signal }
       );
-      return null;
-    }
 
-    console.log(
-      `✅ Loaded graph: ${result.graph.nodes?.length || 0} nodes, ${
-        result.graph.relationships?.length || 0
-      } relationships`
-    );
-    return result.graph;
+      clearTimeout(timeoutId);
+
+      if (response.status === 404) {
+        console.log(`📭 Graph not found for ${commitSha.substring(0, 7)}`);
+        return null;
+      }
+
+      const result = await this.safeParseJSON(response);
+
+      if (!response.ok) {
+        const errorMsg =
+          result?.error || result?.details || `Server error: ${response.status}`;
+        console.error(`❌ Failed to load graph: ${errorMsg}`);
+        throw new Error(errorMsg);
+      }
+
+      if (!result?.graph) {
+        console.log(
+          `📭 No graph data in response for ${commitSha.substring(0, 7)}`
+        );
+        return null;
+      }
+
+      console.log(
+        `✅ Loaded graph: ${result.graph.nodes?.length || 0} nodes, ${
+          result.graph.relationships?.length || 0
+        } relationships`
+      );
+      return result.graph;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error('Request timeout: Graph loading took too long (30s limit)');
+      }
+      throw error;
+    }
   }
 
   /**

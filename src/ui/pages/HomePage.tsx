@@ -615,19 +615,31 @@ const HomePage: React.FC = () => {
         progress: `Loading graph for commit ${commit.sha.substring(0, 7)}...`,
       });
 
+      // Update progress to show we're fetching
+      setLoadingProgress(60);
+      updateState({
+        progress: `Fetching graph data for commit ${commit.sha.substring(0, 7)}...`,
+      });
+
       const graph = await loadGraph(owner, repo, commit.sha);
+
+      // Update progress to show we're processing
+      setLoadingProgress(80);
+      updateState({
+        progress: `Processing graph data...`,
+      });
 
       setLoadingStage("");
       setLoadingProgress(undefined);
       if (graph) {
         setCurrentCommitSha(commit.sha);
-        // Create a new object reference to ensure React detects the change
-        // This is important when loading different commits - the graph content changes
-        // but React's shallow comparison might not detect it if the reference is the same
-        // We create new arrays to ensure a completely new object reference
+        // Since the graph comes from JSON.parse, it's already a new object reference
+        // We only need to ensure the top-level reference is new, not deep clone everything
+        // This avoids blocking the UI thread for large graphs
         const newGraph: KnowledgeGraph = {
-          nodes: graph.nodes.map(node => ({ ...node })),
-          relationships: graph.relationships.map(rel => ({ ...rel })),
+          ...graph,
+          nodes: [...graph.nodes],
+          relationships: [...graph.relationships],
         };
         updateState({
           graph: newGraph,
