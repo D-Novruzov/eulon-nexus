@@ -392,14 +392,21 @@ const GraphVisualization: React.FC<GraphVisualizationProps> = ({
 
   // Create a unique identifier for the graph to detect changes
   // This ensures the visualization updates when loading different commits
-  // We use a combination of node count, relationship count, and a sample of node IDs
-  // to create a signature that changes when the graph content changes
+  // We use a hash of all node IDs and relationship IDs to ensure uniqueness
   const graphSignature = useMemo(() => {
     if (!graph || !graph.nodes.length) return null;
-    // Create a signature from graph structure that will change when content changes
-    const nodeIds = graph.nodes.slice(0, 10).map(n => n.id).sort().join(',');
-    const relIds = graph.relationships.slice(0, 10).map(r => `${r.source}-${r.target}`).sort().join(',');
-    return `${graph.nodes.length}-${graph.relationships.length}-${nodeIds.substring(0, 100)}-${relIds.substring(0, 100)}`;
+    // Create a signature from ALL node and relationship IDs to ensure uniqueness
+    // This will change even if graphs have similar structure but different content
+    const allNodeIds = graph.nodes.map(n => n.id).sort().join(',');
+    const allRelIds = graph.relationships.map(r => `${r.source}-${r.type}-${r.target}`).sort().join(',');
+    // Create a simple hash by taking first/last/middle parts to keep it manageable
+    const nodeHash = allNodeIds.length > 200 
+      ? allNodeIds.substring(0, 100) + '...' + allNodeIds.substring(allNodeIds.length - 100)
+      : allNodeIds;
+    const relHash = allRelIds.length > 200
+      ? allRelIds.substring(0, 100) + '...' + allRelIds.substring(allRelIds.length - 100)
+      : allRelIds;
+    return `${graph.nodes.length}-${graph.relationships.length}-${nodeHash.length}-${relHash.length}-${nodeHash.substring(0, 50)}-${relHash.substring(0, 50)}`;
   }, [graph]);
 
   useEffect(() => {

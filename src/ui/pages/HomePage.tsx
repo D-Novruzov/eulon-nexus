@@ -898,7 +898,7 @@ const HomePage: React.FC = () => {
         "radial-gradient(circle at 80% 10%, rgba(168,85,247,0.2), transparent 35%)," +
         colors.background,
       color: colors.text,
-      padding: "32px",
+      padding: "16px",
       boxSizing: "border-box" as const,
       overflow: "hidden",
       fontFamily:
@@ -915,7 +915,7 @@ const HomePage: React.FC = () => {
       minHeight: 0,
       height: "100%",
       overflow: "hidden",
-      gap: "24px",
+      gap: "12px",
     },
 
     welcomeOverlay: {
@@ -931,15 +931,15 @@ const HomePage: React.FC = () => {
     heroGrid: {
       display: "grid",
       gridTemplateColumns: "minmax(0, 1.6fr) minmax(340px, 1fr)",
-      gap: "32px",
+      gap: "16px",
       width: "min(1200px, 95vw)",
     },
 
     heroPanel: {
       background:
         "linear-gradient(140deg, rgba(2,6,23,0.92) 0%, rgba(8,47,73,0.95) 45%, rgba(30,27,75,0.9) 100%)",
-      borderRadius: "32px",
-      padding: "40px",
+      borderRadius: "10px",
+      padding: "24px",
       border: `1px solid ${colors.borderDark}`,
       boxShadow: "0 40px 120px rgba(2,6,23,0.65)",
       position: "relative" as const,
@@ -952,7 +952,7 @@ const HomePage: React.FC = () => {
       gap: "8px",
       padding: "6px 14px",
       borderRadius: "999px",
-      fontSize: "12px",
+      fontSize: "10px",
       letterSpacing: "0.2em",
       textTransform: "uppercase" as const,
       background: "rgba(56,189,248,0.15)",
@@ -961,22 +961,22 @@ const HomePage: React.FC = () => {
     },
 
     heroTitle: {
-      fontSize: "46px",
+      fontSize: "24px",
       lineHeight: 1.1,
-      margin: "24px 0 12px",
+      margin: "16px 0 8px",
       fontWeight: 600,
       textShadow: "0 15px 40px rgba(0,0,0,0.45)",
     },
 
     heroSubtitle: {
-      fontSize: "16px",
+      fontSize: "11px",
       color: colors.textSecondary,
       lineHeight: 1.6,
       maxWidth: "520px",
     },
 
     heroStats: {
-      marginTop: "32px",
+      marginTop: "20px",
       display: "grid",
       gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
       gap: "16px",
@@ -984,7 +984,7 @@ const HomePage: React.FC = () => {
 
     heroStatCard: {
       padding: "18px",
-      borderRadius: "20px",
+      borderRadius: "10px",
       border: `1px solid ${colors.border}`,
       background: "rgba(255,255,255,0.03)",
       backdropFilter: "blur(18px)",
@@ -994,24 +994,24 @@ const HomePage: React.FC = () => {
     },
 
     heroStatLabel: {
-      fontSize: "12px",
+      fontSize: "10px",
       textTransform: "uppercase" as const,
       letterSpacing: "0.2em",
       color: colors.textMuted,
     },
 
     heroStatValue: {
-      fontSize: "32px",
+      fontSize: "24px",
       fontWeight: 600,
     },
 
     heroStatMeta: {
-      fontSize: "13px",
+      fontSize: "11px",
       color: colors.textSecondary,
     },
 
     heroTimeline: {
-      marginTop: "36px",
+      marginTop: "24px",
       display: "flex",
       flexDirection: "column" as const,
       gap: "14px",
@@ -1022,7 +1022,7 @@ const HomePage: React.FC = () => {
       alignItems: "center",
       gap: "12px",
       padding: "10px 14px",
-      borderRadius: "14px",
+      borderRadius: "10px",
       background: "rgba(255,255,255,0.02)",
       border: `1px solid ${colors.border}`,
     },
@@ -1030,7 +1030,7 @@ const HomePage: React.FC = () => {
     timelineAccent: {
       width: "32px",
       height: "32px",
-      borderRadius: "12px",
+      borderRadius: "8px",
       background: "rgba(56,189,248,0.12)",
       display: "flex",
       alignItems: "center",
@@ -1042,21 +1042,21 @@ const HomePage: React.FC = () => {
     actionPanel: {
       display: "flex",
       flexDirection: "column" as const,
-      gap: "24px",
+      gap: "12px",
     },
 
     actionCard: {
       background: colors.surface,
-      borderRadius: "28px",
+      borderRadius: "18px",
       border: `1px solid ${colors.surfaceBorder}`,
-      padding: "26px",
+      padding: "18px",
       boxShadow: "0 30px 80px rgba(2,6,23,0.55)",
     },
 
     inputSection: {
       display: "flex",
       flexDirection: "column" as const,
-      gap: "20px",
+      gap: "12px",
     },
 
     inputGroup: {
@@ -1067,32 +1067,32 @@ const HomePage: React.FC = () => {
     },
 
     label: {
-      fontSize: "12px",
+      fontSize: "10px",
       textTransform: "uppercase" as const,
       letterSpacing: "0.2em",
       color: colors.textMuted,
     },
 
     input: {
-      padding: "12px 14px",
-      borderRadius: "12px",
+      padding: "8px 10px",
+      borderRadius: "8px",
       border: `1px solid ${colors.border}`,
       background: "rgba(2,6,23,0.8)",
       color: colors.text,
-      fontSize: "14px",
+      fontSize: "10px",
       fontFamily: "inherit",
       transition: "border 0.2s ease, box-shadow 0.2s ease",
     },
 
     primaryButton: {
-      padding: "14px 20px",
+      padding: "8px 12px",
       borderRadius: "999px",
       border: "none",
       background:
         "linear-gradient(120deg, #38bdf8 0%, #6366f1 45%, #a855f7 100%)",
       color: "#0b1120",
       fontWeight: 600,
-      fontSize: "14px",
+      fontSize: "10px",
       cursor: "pointer",
       display: "flex",
       alignItems: "center",
@@ -1103,12 +1103,12 @@ const HomePage: React.FC = () => {
     },
 
     secondaryButton: {
-      padding: "12px 18px",
-      borderRadius: "14px",
+      padding: "8px 14px",
+      borderRadius: "10px",
       border: `1px solid ${colors.border}`,
       background: "transparent",
       color: colors.text,
-      fontSize: "14px",
+      fontSize: "10px",
       fontWeight: 500,
       cursor: "pointer",
       display: "flex",
@@ -1118,12 +1118,12 @@ const HomePage: React.FC = () => {
     },
 
     ghostButton: {
-      padding: "10px 16px",
-      borderRadius: "14px",
+      padding: "8px 12px",
+      borderRadius: "10px",
       border: `1px solid ${colors.border}`,
       background: "rgba(255,255,255,0.02)",
       color: colors.text,
-      fontSize: "13px",
+      fontSize: "11px",
       fontWeight: 500,
       display: "flex",
       alignItems: "center",
@@ -1135,9 +1135,9 @@ const HomePage: React.FC = () => {
       display: "flex",
       alignItems: "center",
       justifyContent: "space-between",
-      gap: "20px",
-      padding: "20px 28px",
-      borderRadius: "26px",
+      gap: "12px",
+      padding: "12px 16px",
+      borderRadius: "16px",
       background: colors.surface,
       border: `1px solid ${colors.surfaceBorder}`,
       boxShadow: "0 25px 60px rgba(2,6,23,0.55)",
@@ -1150,14 +1150,14 @@ const HomePage: React.FC = () => {
     },
 
     brandName: {
-      fontSize: "18px",
+      fontSize: "14px",
       letterSpacing: "0.38em",
       textTransform: "uppercase" as const,
       fontWeight: 600,
     },
 
     brandSubtitle: {
-      fontSize: "13px",
+      fontSize: "11px",
       color: colors.textMuted,
     },
 
@@ -1176,7 +1176,7 @@ const HomePage: React.FC = () => {
       borderRadius: "999px",
       border: `1px solid ${colors.border}`,
       background: "rgba(255,255,255,0.03)",
-      fontSize: "13px",
+      fontSize: "11px",
       color: colors.textSecondary,
     },
 
@@ -1190,7 +1190,7 @@ const HomePage: React.FC = () => {
       marginTop: "0",
       display: "grid",
       gridTemplateColumns: "minmax(0, 2fr) minmax(320px, 1fr)",
-      gap: "24px",
+      gap: "12px",
       flex: 1,
       minHeight: 0,
       height: "100%",
@@ -1203,7 +1203,7 @@ const HomePage: React.FC = () => {
 
     graphPanel: {
       background: colors.surface,
-      borderRadius: "32px",
+      borderRadius: "10px",
       border: `1px solid ${colors.surfaceBorder}`,
       overflow: "hidden",
       display: "flex",
@@ -1217,7 +1217,7 @@ const HomePage: React.FC = () => {
 
     chatPanel: {
       background: colors.surface,
-      borderRadius: "32px",
+      borderRadius: "10px",
       border: `1px solid ${colors.surfaceBorder}`,
       overflow: "hidden",
       display: "flex",
@@ -1243,11 +1243,11 @@ const HomePage: React.FC = () => {
 
     smallIconButton: {
       border: `1px solid ${colors.border}`,
-      borderRadius: "12px",
+      borderRadius: "8px",
       background: "rgba(255,255,255,0.02)",
       color: colors.text,
       padding: "6px 12px",
-      fontSize: "12px",
+      fontSize: "10px",
       cursor: "pointer",
       transition: "all 0.2s ease",
     },
@@ -1262,7 +1262,7 @@ const HomePage: React.FC = () => {
     },
 
     statsSectionTitle: {
-      fontSize: "16px",
+      fontSize: "11px",
       fontWeight: 600,
       marginBottom: "16px",
       color: colors.textSecondary,
@@ -1279,7 +1279,7 @@ const HomePage: React.FC = () => {
       borderRadius: "18px",
       background: "rgba(255,255,255,0.02)",
       border: `1px solid ${colors.surfaceBorder}`,
-      fontSize: "13px",
+      fontSize: "11px",
       color: colors.textSecondary,
     },
 
@@ -1291,7 +1291,7 @@ const HomePage: React.FC = () => {
       borderRadius: "999px",
       background: "rgba(56,189,248,0.12)",
       color: colors.primaryLight,
-      fontSize: "12px",
+      fontSize: "10px",
       textTransform: "uppercase" as const,
       letterSpacing: "0.1em",
     },
@@ -1300,18 +1300,18 @@ const HomePage: React.FC = () => {
       background: colors.errorLight,
       border: `1px solid ${colors.error}`,
       color: colors.error,
-      padding: "12px 14px",
-      borderRadius: "14px",
-      fontSize: "13px",
+      padding: "8px 10px",
+      borderRadius: "10px",
+      fontSize: "11px",
     },
 
     progressBanner: {
       background: "rgba(34,197,94,0.12)",
       border: `1px solid rgba(34,197,94,0.35)`,
       color: colors.success,
-      padding: "12px 14px",
-      borderRadius: "14px",
-      fontSize: "13px",
+      padding: "8px 10px",
+      borderRadius: "10px",
+      fontSize: "11px",
       display: "flex",
       alignItems: "center",
       gap: "10px",
@@ -1520,7 +1520,7 @@ const HomePage: React.FC = () => {
                 <div
                   style={{
                     marginTop: "10px",
-                    fontSize: "12px",
+                    fontSize: "10px",
                     color: colors.textSecondary,
                   }}
                 >
@@ -1816,7 +1816,7 @@ const HomePage: React.FC = () => {
               disabled={!state.graph}
               style={{
                 ...styles.primaryButton,
-                padding: "12px 18px",
+                padding: "8px 14px",
                 borderRadius: "18px",
                 opacity: state.graph ? 1 : 0.5,
                 cursor: state.graph ? "pointer" : "not-allowed",
@@ -1829,7 +1829,7 @@ const HomePage: React.FC = () => {
               onClick={handleNewProject}
               style={{
                 ...styles.secondaryButton,
-                padding: "12px 18px",
+                padding: "8px 14px",
                 borderRadius: "18px",
               }}
             >
@@ -2020,6 +2020,7 @@ const HomePage: React.FC = () => {
             </div>
             <div style={{ flex: 1, minHeight: 0 }}>
               <GraphExplorer
+                key={currentCommitSha || 'default'} // Force re-render when commit changes
                 graph={state.graph!}
                 isLoading={state.isLoading}
                 onNodeSelect={handleNodeSelect}
@@ -2367,7 +2368,7 @@ const HomePage: React.FC = () => {
                   style={{
                     color: colors.text,
                     marginBottom: "14px",
-                    fontSize: "14px",
+                    fontSize: "10px",
                     fontWeight: "600",
                     display: "flex",
                     alignItems: "center",
@@ -2431,7 +2432,7 @@ const HomePage: React.FC = () => {
                   style={{
                     color: colors.text,
                     marginBottom: "14px",
-                    fontSize: "14px",
+                    fontSize: "10px",
                     fontWeight: "600",
                     display: "flex",
                     alignItems: "center",
@@ -2572,7 +2573,7 @@ const HomePage: React.FC = () => {
                 {/* Configuration Status */}
                 <div
                   style={{
-                    padding: "12px 14px",
+                    padding: "8px 10px",
                     borderRadius: "6px",
                     backgroundColor: isApiKeyValid
                       ? "#ECFDF5"
@@ -2588,7 +2589,7 @@ const HomePage: React.FC = () => {
                 >
                   <span
                     style={{
-                      fontSize: "16px",
+                      fontSize: "11px",
                       marginTop: "0px",
                       flexShrink: 0,
                     }}
@@ -2598,7 +2599,7 @@ const HomePage: React.FC = () => {
                   <div>
                     <div
                       style={{
-                        fontSize: "13px",
+                        fontSize: "11px",
                         fontWeight: "600",
                         color: isApiKeyValid ? colors.secondary : colors.error,
                         marginBottom: isApiKeyValid ? 0 : "4px",
@@ -2621,7 +2622,7 @@ const HomePage: React.FC = () => {
                 {/* Provider Information */}
                 <div
                   style={{
-                    padding: "12px 14px",
+                    padding: "8px 10px",
                     borderRadius: "6px",
                     backgroundColor: colors.backgroundAlt,
                     border: `1px solid ${colors.border}`,
@@ -2630,7 +2631,7 @@ const HomePage: React.FC = () => {
                 >
                   <div
                     style={{
-                      fontSize: "12px",
+                      fontSize: "10px",
                       fontWeight: "600",
                       color: colors.text,
                       marginBottom: "6px",
@@ -2644,7 +2645,7 @@ const HomePage: React.FC = () => {
                   </div>
                   <div
                     style={{
-                      fontSize: "12px",
+                      fontSize: "10px",
                       color: colors.textSecondary,
                       lineHeight: "1.5",
                     }}
@@ -2763,7 +2764,7 @@ const HomePage: React.FC = () => {
               {!currentRepoInfo ? (
                 <div
                   style={{
-                    padding: "40px",
+                    padding: "24px",
                     textAlign: "center",
                     color: colors.textMuted,
                   }}
@@ -2791,7 +2792,7 @@ const HomePage: React.FC = () => {
               ) : historyError ? (
                 <div
                   style={{
-                    padding: "40px",
+                    padding: "24px",
                     textAlign: "center",
                     color: colors.textMuted,
                   }}
@@ -2850,7 +2851,7 @@ const HomePage: React.FC = () => {
               ) : !commitTimeline && historyLoading ? (
                 <div
                   style={{
-                    padding: "40px",
+                    padding: "24px",
                     textAlign: "center",
                     color: colors.textMuted,
                   }}
@@ -2899,7 +2900,7 @@ const HomePage: React.FC = () => {
               ) : (
                 <div
                   style={{
-                    padding: "40px",
+                    padding: "24px",
                     textAlign: "center",
                     color: colors.textMuted,
                   }}
