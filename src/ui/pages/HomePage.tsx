@@ -1150,6 +1150,21 @@ const HomePage: React.FC = () => {
           />
         </div>
 
+        {isGraphValid && (
+          <button
+            onClick={() => updateState({ showWelcome: false })}
+            style={{
+              ...styles.primaryButton,
+              width: "100%",
+              maxWidth: "600px",
+              margin: "6px auto 0",
+            }}
+            className="button-responsive"
+          >
+            🚀 View Graph
+          </button>
+        )}
+
         <button
           onClick={() => updateState({ showSettings: true })}
           style={{ ...styles.secondaryButton, marginTop: "6px" }}
@@ -1216,6 +1231,18 @@ const HomePage: React.FC = () => {
             }}
             className="navbar-buttons-responsive"
           >
+            <button
+              onClick={() => updateState({ showWelcome: true })}
+              style={{
+                ...styles.navbarButton,
+                backgroundColor: colors.primary,
+                color: "#fff",
+              }}
+              className="navbar-button-responsive"
+            >
+              <span>🏠</span>
+              Home
+            </button>
             <button
               onClick={async () => {
                 updateState({ showHistory: true });
