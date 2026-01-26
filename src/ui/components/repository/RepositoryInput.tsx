@@ -169,13 +169,17 @@ const RepositoryInput: React.FC<RepositoryInputProps> = ({
           overflow: hidden;
           box-shadow: 0 16px 45px rgba(15,23,42,0.9);
           border: 1px solid rgba(148,163,184,0.5);
+          width: 100%;
+          max-width: 100%;
+          box-sizing: border-box;
         }
         
         .upload-header {
-          padding: 1rem 1.5rem 0.75rem 1.5rem;
+          padding: 0.75rem 1rem 0.5rem 1rem;
           text-align: left;
           background: linear-gradient(135deg, #0f172a 0%, #1d4ed8 45%, #22c55e 100%);
           color: #e5e7eb;
+          box-sizing: border-box;
         }
         
         .upload-header h3 {
@@ -192,15 +196,18 @@ const RepositoryInput: React.FC<RepositoryInputProps> = ({
         }
         
         .zip-drop-zone {
-          margin: 1rem 1.5rem;
+          margin: 0.75rem 1rem;
           border: 2px dashed rgba(148,163,184,0.7);
-          border-radius: 10px;
-          padding: 1.5rem 1.5rem;
+          border-radius: 8px;
+          padding: 1rem;
           text-align: center;
           cursor: pointer;
           transition: all 0.25s ease;
           position: relative;
           background: radial-gradient(circle at top, rgba(15,23,42,0.95), rgba(15,23,42,0.98));
+          width: 100%;
+          max-width: 100%;
+          box-sizing: border-box;
         }
         
         .zip-drop-zone:hover {
@@ -259,14 +266,15 @@ const RepositoryInput: React.FC<RepositoryInputProps> = ({
         }
         
         .browse-button {
-          padding: 0.6rem 1.8rem;
+          padding: 0.5rem 1.2rem;
           background: linear-gradient(135deg, #6366f1 0%, #22d3ee 50%, #22c55e 100%);
           color: #f9fafb;
           border-radius: 999px;
           font-weight: 600;
-          font-size: 0.85rem;
+          font-size: 0.8rem;
           transition: all 0.2s ease;
           box-shadow: 0 10px 30px rgba(56,189,248,0.55);
+          white-space: nowrap;
         }
         
         .zip-drop-zone:hover .browse-button {
@@ -277,13 +285,16 @@ const RepositoryInput: React.FC<RepositoryInputProps> = ({
         .selected-file-info {
           display: flex;
           align-items: center;
-          gap: 1.5rem;
-          padding: 1rem 2rem;
+          gap: 1rem;
+          padding: 0.75rem 1rem;
           background: rgba(15,23,42,0.95);
-          border-radius: 10px;
+          border-radius: 8px;
           box-shadow: 0 10px 30px rgba(15,23,42,0.8);
-          min-width: 300px;
+          min-width: 0;
+          max-width: 100%;
+          width: 100%;
           border: 1px solid rgba(148,163,184,0.6);
+          box-sizing: border-box;
         }
         
         .file-icon {
@@ -334,9 +345,10 @@ const RepositoryInput: React.FC<RepositoryInputProps> = ({
         }
         
         .upload-tips {
-          padding: 1rem 1.5rem 1.25rem 1.5rem;
+          padding: 0.75rem 1rem 1rem 1rem;
           background: radial-gradient(circle at left, rgba(15,23,42,1), rgba(15,23,42,0.98));
           border-top: 1px solid rgba(15,23,42,1);
+          box-sizing: border-box;
         }
         
         .tip-item {

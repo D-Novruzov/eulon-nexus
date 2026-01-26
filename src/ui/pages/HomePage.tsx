@@ -925,25 +925,32 @@ const HomePage: React.FC = () => {
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      padding: "32px 24px",
+      padding: "16px 12px",
+      boxSizing: "border-box" as const,
+      overflow: "hidden",
     },
 
     heroGrid: {
       display: "grid",
-      gridTemplateColumns: "minmax(0, 1.6fr) minmax(340px, 1fr)",
-      gap: "16px",
-      width: "min(1200px, 95vw)",
+      gridTemplateColumns: "minmax(0, 1.6fr) minmax(280px, 1fr)",
+      gap: "12px",
+      width: "min(1000px, 98vw)",
+      maxWidth: "100%",
+      boxSizing: "border-box" as const,
     },
 
     heroPanel: {
       background:
         "linear-gradient(140deg, rgba(2,6,23,0.92) 0%, rgba(8,47,73,0.95) 45%, rgba(30,27,75,0.9) 100%)",
       borderRadius: "10px",
-      padding: "24px",
+      padding: "20px",
       border: `1px solid ${colors.borderDark}`,
       boxShadow: "0 40px 120px rgba(2,6,23,0.65)",
       position: "relative" as const,
       overflow: "hidden",
+      boxSizing: "border-box" as const,
+      width: "100%",
+      maxWidth: "100%",
     },
 
     heroBadge: {
@@ -1043,14 +1050,22 @@ const HomePage: React.FC = () => {
       display: "flex",
       flexDirection: "column" as const,
       gap: "12px",
+      width: "100%",
+      maxWidth: "100%",
+      boxSizing: "border-box" as const,
+      overflow: "hidden",
     },
 
     actionCard: {
       background: colors.surface,
       borderRadius: "18px",
       border: `1px solid ${colors.surfaceBorder}`,
-      padding: "18px",
+      padding: "14px",
       boxShadow: "0 30px 80px rgba(2,6,23,0.55)",
+      boxSizing: "border-box" as const,
+      overflow: "hidden",
+      width: "100%",
+      maxWidth: "100%",
     },
 
     inputSection: {
@@ -1488,8 +1503,8 @@ const HomePage: React.FC = () => {
                 }}
               >
                 <div>
-                  <div style={{ fontSize: "15px", fontWeight: 600 }}>GitHub Workspace</div>
-                  <div style={{ fontSize: "13px", color: colors.textSecondary }}>
+                  <div style={{ fontSize: "12px", fontWeight: 600 }}>GitHub Workspace</div>
+                  <div style={{ fontSize: "11px", color: colors.textSecondary }}>
                     Authenticate once, then pull entire organizations into the graph.
                   </div>
                 </div>
@@ -1530,9 +1545,9 @@ const HomePage: React.FC = () => {
             </div>
 
             <div style={styles.actionCard}>
-              <div style={{ marginBottom: "12px" }}>
-                <div style={{ fontSize: "15px", fontWeight: 600 }}>Manual Upload</div>
-                <div style={{ fontSize: "13px", color: colors.textSecondary }}>
+              <div style={{ marginBottom: "10px" }}>
+                <div style={{ fontSize: "12px", fontWeight: 600 }}>Manual Upload</div>
+                <div style={{ fontSize: "11px", color: colors.textSecondary }}>
                   Drop a ZIP archive to build a graph locally without credentials.
                 </div>
               </div>
