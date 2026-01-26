@@ -621,8 +621,16 @@ const HomePage: React.FC = () => {
       setLoadingProgress(undefined);
       if (graph) {
         setCurrentCommitSha(commit.sha);
+        // Create a new object reference to ensure React detects the change
+        // This is important when loading different commits - the graph content changes
+        // but React's shallow comparison might not detect it if the reference is the same
+        // We create new arrays to ensure a completely new object reference
+        const newGraph: KnowledgeGraph = {
+          nodes: graph.nodes.map(node => ({ ...node })),
+          relationships: graph.relationships.map(rel => ({ ...rel })),
+        };
         updateState({
-          graph: graph,
+          graph: newGraph,
           progress: "",
         });
         console.log(`✅ Loaded graph for commit ${commit.sha.substring(0, 7)}`);

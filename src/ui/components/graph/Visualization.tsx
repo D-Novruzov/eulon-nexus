@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import * as d3 from 'd3';
 import type { KnowledgeGraph, GraphNode, GraphRelationship } from '../../../core/graph/types.ts';
 
@@ -390,6 +390,18 @@ const GraphVisualization: React.FC<GraphVisualizationProps> = ({
     };
   }, []);
 
+  // Create a unique identifier for the graph to detect changes
+  // This ensures the visualization updates when loading different commits
+  // We use a combination of node count, relationship count, and a sample of node IDs
+  // to create a signature that changes when the graph content changes
+  const graphSignature = useMemo(() => {
+    if (!graph || !graph.nodes.length) return null;
+    // Create a signature from graph structure that will change when content changes
+    const nodeIds = graph.nodes.slice(0, 10).map(n => n.id).sort().join(',');
+    const relIds = graph.relationships.slice(0, 10).map(r => `${r.source}-${r.target}`).sort().join(',');
+    return `${graph.nodes.length}-${graph.relationships.length}-${nodeIds.substring(0, 100)}-${relIds.substring(0, 100)}`;
+  }, [graph]);
+
   useEffect(() => {
     if (!graph || !graph.nodes.length || !canvasRef.current) return;
     const data = convertToRenderData(graph);
@@ -402,7 +414,7 @@ const GraphVisualization: React.FC<GraphVisualizationProps> = ({
       simulationRef.current = null;
       if (animationFrame.current) cancelAnimationFrame(animationFrame.current);
     };
-  }, [graph]);
+  }, [graph, graphSignature]);
 
   useEffect(() => {
     scheduleDraw();
